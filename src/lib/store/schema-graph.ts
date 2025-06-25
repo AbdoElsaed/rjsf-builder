@@ -23,6 +23,7 @@ export type JSONSchemaDefinition = {
 
 export interface FieldNode {
     id: string;
+    key: string;  // The editable key that will be used in the JSON schema
     type: JSONSchemaType;
     title: string;
     description?: string;
@@ -76,6 +77,7 @@ export const useSchemaGraphStore = create<SchemaGraphState>((set, get) => ({
         nodes: {
             root: {
                 id: 'root',
+                key: 'root',
                 type: 'object',
                 title: 'Root',
                 children: [],
@@ -88,10 +90,17 @@ export const useSchemaGraphStore = create<SchemaGraphState>((set, get) => ({
         const newId = uuidv4();
         set((state: SchemaGraphState) => {
             const newState = deepClone(state);
-            // Create new node
+            // Create new node with a default key based on title
+            const defaultKey = nodeData.title
+                .toLowerCase()
+                .replace(/[^a-z0-9]/g, '_')  // Replace non-alphanumeric chars with underscore
+                .replace(/_+/g, '_')         // Replace multiple underscores with single
+                .replace(/^_|_$/g, '');      // Remove leading/trailing underscores
+
             newState.graph.nodes[newId] = {
                 ...nodeData,
                 id: newId,
+                key: defaultKey,
                 parentId,
                 children: nodeData.type === 'object' || nodeData.type === 'array' ? [] : undefined,
             };
@@ -163,11 +172,12 @@ export const useSchemaGraphStore = create<SchemaGraphState>((set, get) => ({
     },
 
     setSchemaFromJson: (inputSchema: RJSFSchema) => {
-        const schema = inputSchema as unknown as ExtendedRJSFSchema;
+        const schema = inputSchema as ExtendedRJSFSchema;
         const newGraph: SchemaGraph = {
             nodes: {
                 root: {
                     id: 'root',
+                    key: 'root',
                     type: 'object',
                     title: schema.title || 'Root',
                     children: [],
@@ -177,19 +187,20 @@ export const useSchemaGraphStore = create<SchemaGraphState>((set, get) => ({
         };
 
         // Helper function to convert JSON schema to nodes
-        const processSchema = (schema: ExtendedRJSFSchema, parentId: string): string => {
+        const processSchema = (schema: ExtendedRJSFSchema, parentId: string, schemaKey: string): string => {
             const newId = uuidv4();
-            const schemaType = Array.isArray(schema.type) ? schema.type[0] : schema.type;
+            const schemaType = Array.isArray(schema.type) ? schema.type[0] : schema.type || 'object';
             const type = schema.enum ? 'enum' : schemaType as JSONSchemaType;
 
             newGraph.nodes[newId] = {
                 id: newId,
+                key: schemaKey,
                 type,
                 title: schema.title || `New ${type}`,
                 description: schema.description,
                 parentId,
                 children: [],
-                required: schema.required ? true : false,
+                required: Array.isArray(schema.required) && schema.required.length > 0,
             };
 
             if (schema.enum) {
@@ -215,8 +226,8 @@ export const useSchemaGraphStore = create<SchemaGraphState>((set, get) => ({
 
             // Process children for objects
             if (type === 'object' && schema.properties) {
-                Object.entries(schema.properties).forEach(([, prop]) => {
-                    const childId = processSchema(prop, newId);
+                Object.entries(schema.properties).forEach(([key, prop]) => {
+                    const childId = processSchema(prop as ExtendedRJSFSchema, newId, key);
                     if (newGraph.nodes[newId].children) {
                         newGraph.nodes[newId].children.push(childId);
                     }
@@ -225,7 +236,7 @@ export const useSchemaGraphStore = create<SchemaGraphState>((set, get) => ({
 
             // Process items for arrays
             if (type === 'array' && schema.items && !Array.isArray(schema.items)) {
-                const childId = processSchema(schema.items, newId);
+                const childId = processSchema(schema.items as ExtendedRJSFSchema, newId, 'items');
                 if (newGraph.nodes[newId].children) {
                     newGraph.nodes[newId].children.push(childId);
                 }
@@ -234,10 +245,10 @@ export const useSchemaGraphStore = create<SchemaGraphState>((set, get) => ({
             return newId;
         };
 
-        // Process the root schema
+        // Process properties for the root object
         if (schema.properties) {
-            Object.entries(schema.properties).forEach(([, prop]) => {
-                const childId = processSchema(prop, 'root');
+            Object.entries(schema.properties).forEach(([key, prop]) => {
+                const childId = processSchema(prop as ExtendedRJSFSchema, 'root', key);
                 if (newGraph.nodes.root.children) {
                     newGraph.nodes.root.children.push(childId);
                 }
@@ -248,46 +259,39 @@ export const useSchemaGraphStore = create<SchemaGraphState>((set, get) => ({
     },
 
     compileToJsonSchema: () => {
-        const { graph } = get();
-
+        const state = get();
         const compileNode = (nodeId: string): RJSFSchema => {
-            const node = graph.nodes[nodeId];
+            const node = state.graph.nodes[nodeId];
             const schema: RJSFSchema = {
                 type: node.type === 'enum' ? 'string' : node.type,
                 title: node.title,
             };
 
-            if (node.description) schema.description = node.description;
-            if (node.default !== undefined) schema.default = node.default;
-            if (node.validation) {
-                Object.assign(schema, node.validation);
+            if (node.description) {
+                schema.description = node.description;
             }
 
-            // Handle enums
+            if (node.type === 'object' && node.children?.length) {
+                schema.properties = {};
+                schema.required = [];
+                node.children.forEach((childId) => {
+                    const childNode = state.graph.nodes[childId];
+                    if (schema.properties) {
+                        schema.properties[childNode.key] = compileNode(childId);
+                        if (childNode.required) {
+                            schema.required.push(childNode.key);
+                        }
+                    }
+                });
+                if (schema.required.length === 0) {
+                    delete schema.required;
+                }
+            }
+
             if (node.type === 'enum' && node.enum) {
                 schema.enum = node.enum;
                 if (node.enumNames) {
                     (schema as any).enumNames = node.enumNames;
-                }
-            }
-
-            // Handle objects and arrays
-            if (node.type === 'object' && node.children?.length) {
-                schema.properties = {};
-                const required: string[] = [];
-                schema.required = required;
-
-                node.children.forEach((childId: string) => {
-                    const childNode = graph.nodes[childId];
-                    if (!schema.properties) return;
-                    schema.properties[childId] = compileNode(childId);
-                    if (childNode.required) {
-                        required.push(childId);
-                    }
-                });
-
-                if (required.length === 0) {
-                    delete schema.required;
                 }
             }
 
@@ -299,6 +303,6 @@ export const useSchemaGraphStore = create<SchemaGraphState>((set, get) => ({
             return schema;
         };
 
-        return compileNode(graph.rootId);
+        return compileNode('root');
     },
 })); 

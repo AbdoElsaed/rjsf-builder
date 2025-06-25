@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useState } from "react";
 import { useSchemaGraphStore } from "@/lib/store/schema-graph";
+import { toast } from "sonner";
 
 const FIELD_ICONS = {
   string: TextQuote,
@@ -40,6 +41,7 @@ export function FormNode({ nodeId, selectedNodeId, onSelect }: FormNodeProps) {
   const [formData, setFormData] = useState({
     title: "",
     description: "",
+    key: "",
     required: false,
   });
   const node = graph.nodes[nodeId];
@@ -81,6 +83,7 @@ export function FormNode({ nodeId, selectedNodeId, onSelect }: FormNodeProps) {
     setFormData({
       title: node.title,
       description: node.description || "",
+      key: node.key,
       required: node.required || false,
     });
     setIsEditing(true);
@@ -89,9 +92,38 @@ export function FormNode({ nodeId, selectedNodeId, onSelect }: FormNodeProps) {
 
   const handleSave = (e: React.MouseEvent) => {
     e.stopPropagation();
+    // Validate and format the key
+    const formattedKey = formData.key
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "");
+
+    if (!formattedKey) {
+      toast.error("Key cannot be empty");
+      return;
+    }
+
+    // Check if the key is unique among siblings
+    const parent = node.parentId
+      ? graph.nodes[node.parentId]
+      : graph.nodes.root;
+    const siblings = parent.children || [];
+    const hasDuplicateKey = siblings.some((siblingId) => {
+      if (siblingId === nodeId) return false; // Skip self
+      const sibling = graph.nodes[siblingId];
+      return sibling.key === formattedKey;
+    });
+
+    if (hasDuplicateKey) {
+      toast.error("Key must be unique among siblings");
+      return;
+    }
+
     updateNode(nodeId, {
       title: formData.title,
       description: formData.description || undefined,
+      key: formattedKey,
       required: formData.required,
     });
     setIsEditing(false);
@@ -143,6 +175,14 @@ export function FormNode({ nodeId, selectedNodeId, onSelect }: FormNodeProps) {
                 </div>
               </div>
               <Input
+                value={formData.key}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, key: e.target.value }))
+                }
+                placeholder="Enter field key"
+                className="h-7 text-sm"
+              />
+              <Input
                 value={formData.description}
                 onChange={(e) =>
                   setFormData((prev) => ({
@@ -163,6 +203,7 @@ export function FormNode({ nodeId, selectedNodeId, onSelect }: FormNodeProps) {
       <div className="flex items-center gap-2 flex-1">
         <Icon className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-medium">{node.title}</span>
+        <span className="text-xs text-muted-foreground">({node.key})</span>
         {node.description && (
           <span className="text-xs text-muted-foreground">
             ({node.description})
