@@ -48,6 +48,13 @@ export interface SchemaGraph {
     rootId: string;
 }
 
+interface ExtendedRJSFSchema extends Omit<RJSFSchema, 'type'> {
+    enumNames?: string[];
+    type: string | string[];
+    properties?: Record<string, ExtendedRJSFSchema>;
+    items?: ExtendedRJSFSchema;
+}
+
 interface SchemaGraphState {
     graph: SchemaGraph;
     // Actions
@@ -55,6 +62,7 @@ interface SchemaGraphState {
     removeNode: (nodeId: string) => void;
     updateNode: (nodeId: string, updates: Partial<FieldNode>) => void;
     moveNode: (nodeId: string, newParentId: string) => void;
+    setSchemaFromJson: (inputSchema: RJSFSchema) => void;
     // Compiler
     compileToJsonSchema: () => RJSFSchema;
 }
@@ -152,6 +160,91 @@ export const useSchemaGraphStore = create<SchemaGraphState>((set, get) => ({
 
             return newState;
         });
+    },
+
+    setSchemaFromJson: (inputSchema: RJSFSchema) => {
+        const schema = inputSchema as unknown as ExtendedRJSFSchema;
+        const newGraph: SchemaGraph = {
+            nodes: {
+                root: {
+                    id: 'root',
+                    type: 'object',
+                    title: schema.title || 'Root',
+                    children: [],
+                },
+            },
+            rootId: 'root',
+        };
+
+        // Helper function to convert JSON schema to nodes
+        const processSchema = (schema: ExtendedRJSFSchema, parentId: string): string => {
+            const newId = uuidv4();
+            const schemaType = Array.isArray(schema.type) ? schema.type[0] : schema.type;
+            const type = schema.enum ? 'enum' : schemaType as JSONSchemaType;
+
+            newGraph.nodes[newId] = {
+                id: newId,
+                type,
+                title: schema.title || `New ${type}`,
+                description: schema.description,
+                parentId,
+                children: [],
+                required: schema.required ? true : false,
+            };
+
+            if (schema.enum) {
+                newGraph.nodes[newId].enum = schema.enum as string[];
+                if (schema.enumNames) {
+                    newGraph.nodes[newId].enumNames = schema.enumNames;
+                }
+            }
+
+            // Handle validation
+            if (type === 'number') {
+                newGraph.nodes[newId].validation = {
+                    minimum: typeof schema.minimum === 'number' ? schema.minimum : undefined,
+                    maximum: typeof schema.maximum === 'number' ? schema.maximum : undefined,
+                };
+            } else if (type === 'string') {
+                newGraph.nodes[newId].validation = {
+                    minLength: typeof schema.minLength === 'number' ? schema.minLength : undefined,
+                    maxLength: typeof schema.maxLength === 'number' ? schema.maxLength : undefined,
+                    pattern: typeof schema.pattern === 'string' ? schema.pattern : undefined,
+                };
+            }
+
+            // Process children for objects
+            if (type === 'object' && schema.properties) {
+                Object.entries(schema.properties).forEach(([, prop]) => {
+                    const childId = processSchema(prop, newId);
+                    if (newGraph.nodes[newId].children) {
+                        newGraph.nodes[newId].children.push(childId);
+                    }
+                });
+            }
+
+            // Process items for arrays
+            if (type === 'array' && schema.items && !Array.isArray(schema.items)) {
+                const childId = processSchema(schema.items, newId);
+                if (newGraph.nodes[newId].children) {
+                    newGraph.nodes[newId].children.push(childId);
+                }
+            }
+
+            return newId;
+        };
+
+        // Process the root schema
+        if (schema.properties) {
+            Object.entries(schema.properties).forEach(([, prop]) => {
+                const childId = processSchema(prop, 'root');
+                if (newGraph.nodes.root.children) {
+                    newGraph.nodes.root.children.push(childId);
+                }
+            });
+        }
+
+        set({ graph: newGraph });
     },
 
     compileToJsonSchema: () => {
