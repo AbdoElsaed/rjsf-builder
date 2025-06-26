@@ -1,4 +1,4 @@
-import { useDraggable, useDroppable } from "@dnd-kit/core";
+import { useDroppable } from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
 import {
   Type,
@@ -19,6 +19,10 @@ import { Switch } from "@/components/ui/switch";
 import { useState } from "react";
 import { useSchemaGraphStore } from "@/lib/store/schema-graph";
 import { toast } from "sonner";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { SortableContext } from "@dnd-kit/sortable";
+import { verticalListSortingStrategy } from "@dnd-kit/sortable";
 
 const FIELD_ICONS = {
   string: TextQuote,
@@ -29,13 +33,30 @@ const FIELD_ICONS = {
   array: Layers,
 } as const;
 
+interface DraggedItem {
+  type: string;
+  label?: string;
+  nodeId?: string;
+  parentId?: string;
+}
+
 interface FormNodeProps {
   nodeId: string;
   selectedNodeId: string | null;
   onSelect: (nodeId: string | null) => void;
+  isDragging?: boolean;
+  draggedItem?: DraggedItem | null;
+  activeDropZone?: string | null;
 }
 
-export function FormNode({ nodeId, selectedNodeId, onSelect }: FormNodeProps) {
+export function FormNode({
+  nodeId,
+  selectedNodeId,
+  onSelect,
+  isDragging: globalIsDragging = false,
+  draggedItem = null,
+  activeDropZone = null,
+}: FormNodeProps) {
   const { graph, updateNode, removeNode } = useSchemaGraphStore();
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
@@ -47,31 +68,59 @@ export function FormNode({ nodeId, selectedNodeId, onSelect }: FormNodeProps) {
   const node = graph.nodes[nodeId];
   const Icon = FIELD_ICONS[node.type];
 
-  // Make the node draggable
+  // Make the node sortable
   const {
     attributes,
     listeners,
-    setNodeRef: setDraggableRef,
+    setNodeRef,
+    transform,
+    transition,
     isDragging,
-  } = useDraggable({
-    id: `draggable-${nodeId}`,
+  } = useSortable({
+    id: nodeId,
     data: {
-      nodeId,
       type: node.type,
       parentId: node.parentId,
     },
   });
 
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
   // Make object and array nodes droppable
   const { setNodeRef: setDroppableRef, isOver } = useDroppable({
-    id: `droppable-${nodeId}`,
+    id: nodeId,
     data: {
-      nodeId,
       type: node.type,
+      nodeId,
       parentId: node.parentId,
     },
-    disabled: node.type !== "object" && node.type !== "array",
   });
+
+  // Check if the current dragged item can be dropped into this node
+  const canAcceptDrop = (
+    draggedType: string,
+    targetType: string,
+    targetNodeId: string
+  ): boolean => {
+    if (targetType === "object") return true; // Objects can accept any field
+    if (targetType === "array") {
+      // Arrays can only accept one type of field and must be consistent
+      const targetNode = graph.nodes[targetNodeId];
+      return (
+        !targetNode?.children?.length ||
+        graph.nodes[targetNode.children[0]].type === draggedType
+      );
+    }
+    return false; // Other field types cannot accept children
+  };
+
+  const canDrop =
+    draggedItem && (node.type === "object" || node.type === "array")
+      ? canAcceptDrop(draggedItem.type, node.type, nodeId)
+      : false;
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -137,9 +186,26 @@ export function FormNode({ nodeId, selectedNodeId, onSelect }: FormNodeProps) {
   };
 
   const baseClasses = cn(
-    "group relative rounded-lg border bg-card shadow-sm transition-colors",
+    "group relative rounded-lg border bg-card shadow-sm transition-all duration-200",
     isDragging && "opacity-50",
-    isOver && "ring-2 ring-primary/20",
+    // Enhanced visual feedback for droppable nodes
+    globalIsDragging &&
+      (node.type === "object" || node.type === "array") &&
+      canDrop &&
+      "border-primary/50 bg-primary/5",
+    globalIsDragging &&
+      (node.type === "object" || node.type === "array") &&
+      !canDrop &&
+      "border-destructive/30 opacity-60",
+    // Active drop zone highlighting
+    activeDropZone === nodeId &&
+      canDrop &&
+      "ring-2 ring-primary/40 bg-primary/10",
+    activeDropZone === nodeId &&
+      !canDrop &&
+      "ring-2 ring-destructive/40 bg-destructive/5",
+    // Legacy hover state for non-dragging scenarios
+    !globalIsDragging && isOver && "ring-2 ring-primary",
     node.type === "object" && "border-primary/20",
     isEditing && "ring-1 ring-primary/20 bg-muted/50"
   );
@@ -214,9 +280,9 @@ export function FormNode({ nodeId, selectedNodeId, onSelect }: FormNodeProps) {
     );
   };
 
-  // Combine draggable and droppable refs if needed
+  // Combine sortable and droppable refs if needed
   const setRefs = (element: HTMLDivElement) => {
-    setDraggableRef(element);
+    setNodeRef(element);
     if (node.type === "object" || node.type === "array") {
       setDroppableRef(element);
     }
@@ -225,6 +291,7 @@ export function FormNode({ nodeId, selectedNodeId, onSelect }: FormNodeProps) {
   return (
     <div
       ref={setRefs}
+      style={style}
       {...attributes}
       className={cn(baseClasses, "p-3 hover:bg-accent")}
     >
@@ -298,20 +365,64 @@ export function FormNode({ nodeId, selectedNodeId, onSelect }: FormNodeProps) {
       </div>
 
       {/* Render children for object and array types */}
-      {(node.type === "object" || node.type === "array") &&
-        node.children &&
-        node.children.length > 0 && (
-          <div className="mt-2 space-y-2 border-l pl-4">
-            {node.children.map((childId) => (
-              <FormNode
-                key={childId}
-                nodeId={childId}
-                selectedNodeId={selectedNodeId}
-                onSelect={onSelect}
-              />
-            ))}
-          </div>
-        )}
+      {(node.type === "object" || node.type === "array") && (
+        <div
+          className={cn(
+            "mt-2 space-y-2 border-l pl-4 transition-all duration-200",
+            // Enhanced visual feedback for child drop zones
+            globalIsDragging && canDrop && "border-primary/40",
+            globalIsDragging && !canDrop && "border-destructive/30",
+            activeDropZone === nodeId &&
+              canDrop &&
+              !node.children?.length &&
+              "min-h-[60px] border border-dashed border-primary/50 rounded-lg bg-primary/5",
+            activeDropZone === nodeId &&
+              !canDrop &&
+              !node.children?.length &&
+              "min-h-[60px] border border-dashed border-destructive/50 rounded-lg bg-destructive/5",
+            // Legacy hover state
+            !globalIsDragging &&
+              isOver &&
+              !node.children?.length &&
+              "min-h-[100px] border border-dashed border-primary/50 rounded-lg"
+          )}
+        >
+          {node.children && node.children.length > 0 ? (
+            <SortableContext
+              items={node.children}
+              strategy={verticalListSortingStrategy}
+            >
+              {node.children.map((childId) => (
+                <FormNode
+                  key={childId}
+                  nodeId={childId}
+                  selectedNodeId={selectedNodeId}
+                  onSelect={onSelect}
+                  isDragging={globalIsDragging}
+                  draggedItem={draggedItem}
+                  activeDropZone={activeDropZone}
+                />
+              ))}
+            </SortableContext>
+          ) : (
+            <div className="flex items-center justify-center h-full text-sm text-muted-foreground py-4">
+              {globalIsDragging ? (
+                canDrop ? (
+                  <span className="text-primary font-medium">
+                    Drop fields here
+                  </span>
+                ) : (
+                  <span className="text-destructive">
+                    Cannot drop this field type here
+                  </span>
+                )
+              ) : (
+                "Drop fields here"
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

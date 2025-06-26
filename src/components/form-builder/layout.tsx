@@ -3,7 +3,13 @@ import {
   DndContext,
   type DragEndEvent,
   type DragStartEvent,
+  type DragOverEvent,
   closestCenter,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
 } from "@dnd-kit/core";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -19,21 +25,60 @@ import { FieldPalette } from "./field-palette";
 import { Canvas } from "./canvas";
 import { PreviewPanel } from "./preview-panel";
 import { useSchemaGraphStore } from "@/lib/store/schema-graph";
-import type { SchemaGraph } from "@/lib/store/schema-graph";
+import type { SchemaGraph, JSONSchemaType } from "@/lib/store/schema-graph";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import {
+  restrictToVerticalAxis,
+  restrictToParentElement,
+} from "@dnd-kit/modifiers";
+
+interface DraggedItem {
+  type: string;
+  label?: string;
+  nodeId?: string;
+  parentId?: string;
+}
 
 export function FormBuilderLayout() {
   const [isDragging, setIsDragging] = useState(false);
+  const [draggedItem, setDraggedItem] = useState<DraggedItem | null>(null);
+  const [activeDropZone, setActiveDropZone] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
-  const { addNode, moveNode, graph } = useSchemaGraphStore();
+  const { addNode, moveNode, reorderNode, graph } = useSchemaGraphStore();
+
+  // Initialize sensors
+  const sensors = useSensors(
+    useSensor(MouseSensor, {
+      activationConstraint: {
+        distance: 5, // 5px movement threshold before drag starts
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 250, // 250ms delay before touch drag starts
+        tolerance: 5, // 5px movement tolerance
+      },
+    })
+  );
 
   const handleDragStart = (event: DragStartEvent) => {
     setIsDragging(true);
+    setDraggedItem((event.active.data.current as DraggedItem) || null);
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const { over } = event;
+    setActiveDropZone(over ? String(over.id) : null);
   };
 
   const canDropIntoParent = (
     childType: string,
-    parentType: string | undefined
+    parentType: string | undefined,
+    parentNodeId?: string
   ) => {
     // Root can accept any field
     if (!parentType) return true;
@@ -43,9 +88,9 @@ export function FormBuilderLayout() {
 
     // Arrays can only accept one type of field and must be consistent
     if (parentType === "array") {
-      const parentNode = Object.values(graph.nodes).find(
-        (node) => node.type === "array" && node.children?.length
-      );
+      // Get the specific parent node being checked
+      const parentNode = parentNodeId ? graph.nodes[parentNodeId] : null;
+
       // If array is empty or matches the existing child type
       return (
         !parentNode?.children?.length ||
@@ -59,54 +104,99 @@ export function FormBuilderLayout() {
 
   const handleDragEnd = (event: DragEndEvent) => {
     setIsDragging(false);
+    setDraggedItem(null);
+    setActiveDropZone(null);
 
     const { active, over } = event;
     if (!over) return;
 
+    const activeId = active.id;
+    const overId = over.id;
+
+    // If the item is dropped over itself, we don't need to do anything
+    if (activeId === overId) return;
+
     const activeData = active.data.current;
     const overData = over.data.current;
 
-    // Get the actual parent ID (either from the over node or its parent)
-    const targetParentId =
-      overData?.type === "object" || overData?.type === "array"
-        ? overData.nodeId
-        : overData?.parentId || "root";
-
     // Case 1: Dropping a new field from the palette
-    if (activeData?.type && !activeData?.nodeId) {
-      const { type, label } = activeData;
+    if (activeData?.type && !graph.nodes[activeId as string]) {
+      // Get the actual parent ID (either from the over node or its parent)
+      const targetParentId = typeof overId === "string" ? overId : "root";
+      const targetNode = graph.nodes[targetParentId];
 
       // Check if we can drop this type into the target parent
-      if (!canDropIntoParent(type, graph.nodes[targetParentId]?.type)) {
+      if (
+        !canDropIntoParent(
+          activeData.type as JSONSchemaType,
+          targetNode?.type,
+          targetParentId
+        )
+      ) {
         return; // Invalid drop target
       }
 
       // Create a new node
+      const title = `New ${activeData.label}`;
+      const baseKey = title
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "_")
+        .replace(/_+/g, "_")
+        .replace(/^_|_$/g, "");
+
+      // Add random number suffix to ensure uniqueness
+      const randomSuffix = Math.floor(Math.random() * 1000);
+      const uniqueKey = `${baseKey}_${randomSuffix}`;
+
       addNode(
         {
-          type,
-          title: `New ${label}`,
+          type: activeData.type as JSONSchemaType,
+          title,
+          key: uniqueKey,
         },
         targetParentId
       );
     }
-    // Case 2: Moving an existing field
-    else if (activeData?.nodeId && activeData.nodeId !== targetParentId) {
-      const movingNode = graph.nodes[activeData.nodeId];
+    // Case 2: Reordering or moving existing fields
+    else if (typeof activeId === "string" && typeof overId === "string") {
+      const activeNode = graph.nodes[activeId];
+      const overNode = graph.nodes[overId];
 
       // Prevent dropping a parent into its own child
-      const isValidMove = !isDescendant(
-        activeData.nodeId,
-        targetParentId,
-        graph
-      );
+      const isValidMove = !isDescendant(activeId, overId, graph);
+      if (!isValidMove) return;
 
-      // Check if we can drop this type into the target parent
+      // If dropping onto an object or array, make it a child
       if (
-        isValidMove &&
-        canDropIntoParent(movingNode.type, graph.nodes[targetParentId]?.type)
+        (overNode.type === "object" || overNode.type === "array") &&
+        canDropIntoParent(activeNode.type, overNode.type, overId)
       ) {
-        moveNode(activeData.nodeId, targetParentId);
+        moveNode(activeId, overId);
+      }
+      // If they have the same parent, it's a reorder operation
+      else if (activeNode.parentId === overNode.parentId) {
+        const parent = activeNode.parentId
+          ? graph.nodes[activeNode.parentId]
+          : graph.nodes.root;
+        const oldIndex = parent.children?.indexOf(activeId) ?? -1;
+        const newIndex = parent.children?.indexOf(overId) ?? -1;
+
+        if (oldIndex !== -1 && newIndex !== -1) {
+          reorderNode(activeId, newIndex);
+        }
+      }
+      // If they have different parents, move to the new parent
+      else {
+        const targetParentId = overNode.parentId || "root";
+        if (
+          canDropIntoParent(
+            activeNode.type,
+            graph.nodes[targetParentId]?.type,
+            targetParentId
+          )
+        ) {
+          moveNode(activeId, targetParentId);
+        }
       }
     }
   };
@@ -127,7 +217,9 @@ export function FormBuilderLayout() {
 
   return (
     <DndContext
+      sensors={sensors}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
       collisionDetection={closestCenter}
     >
@@ -161,6 +253,9 @@ export function FormBuilderLayout() {
               <Canvas
                 onNodeSelect={setSelectedNodeId}
                 selectedNodeId={selectedNodeId}
+                isDragging={isDragging}
+                draggedItem={draggedItem}
+                activeDropZone={activeDropZone}
               />
             </ResizablePanel>
 
@@ -199,6 +294,18 @@ export function FormBuilderLayout() {
           </ResizablePanelGroup>
         </div>
       </div>
+
+      <DragOverlay>
+        {draggedItem && (
+          <div className="bg-background border rounded-lg p-2 shadow-lg opacity-90">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">
+                {draggedItem.label || draggedItem.type}
+              </span>
+            </div>
+          </div>
+        )}
+      </DragOverlay>
     </DndContext>
   );
 }

@@ -1,6 +1,6 @@
 import { useDraggable } from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
-import { Type, TextQuote, ToggleLeft, Hash, List, Layers } from "lucide-react";
+import { Type, TextQuote, ToggleLeft, Hash, Layers } from "lucide-react";
 
 interface FieldTypeItem {
   id: string;
@@ -27,12 +27,6 @@ const FIELD_TYPES: FieldTypeItem[] = [
     type: "boolean",
     icon: ToggleLeft,
     label: "Yes/No",
-  },
-  {
-    id: "enum-field",
-    type: "enum",
-    icon: List,
-    label: "Choice",
   },
   {
     id: "object-field",

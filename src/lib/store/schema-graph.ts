@@ -63,6 +63,7 @@ interface SchemaGraphState {
     removeNode: (nodeId: string) => void;
     updateNode: (nodeId: string, updates: Partial<FieldNode>) => void;
     moveNode: (nodeId: string, newParentId: string) => void;
+    reorderNode: (nodeId: string, newIndex: number) => void;
     setSchemaFromJson: (inputSchema: RJSFSchema) => void;
     // Compiler
     compileToJsonSchema: () => RJSFSchema;
@@ -90,12 +91,16 @@ export const useSchemaGraphStore = create<SchemaGraphState>((set, get) => ({
         const newId = uuidv4();
         set((state: SchemaGraphState) => {
             const newState = deepClone(state);
-            // Create new node with a default key based on title
-            const defaultKey = nodeData.title
+            // Create new node with a default key based on title with random suffix
+            const baseKey = nodeData.title
                 .toLowerCase()
                 .replace(/[^a-z0-9]/g, '_')  // Replace non-alphanumeric chars with underscore
                 .replace(/_+/g, '_')         // Replace multiple underscores with single
                 .replace(/^_|_$/g, '');      // Remove leading/trailing underscores
+
+            // Add random number suffix to ensure uniqueness
+            const randomSuffix = Math.floor(Math.random() * 1000);
+            const defaultKey = `${baseKey}_${randomSuffix}`;
 
             newState.graph.nodes[newId] = {
                 ...nodeData,
@@ -166,6 +171,27 @@ export const useSchemaGraphStore = create<SchemaGraphState>((set, get) => ({
             const newParent = newState.graph.nodes[newParentId];
             newParent.children = [...(newParent.children || []), nodeId];
             node.parentId = newParentId;
+
+            return newState;
+        });
+    },
+
+    reorderNode: (nodeId: string, newIndex: number) => {
+        set((state: SchemaGraphState) => {
+            const newState = deepClone(state);
+            const node = newState.graph.nodes[nodeId];
+            const parentId = node.parentId || 'root';
+            const parent = newState.graph.nodes[parentId];
+
+            if (!parent.children) return newState;
+
+            // Remove node from current position
+            const currentIndex = parent.children.indexOf(nodeId);
+            if (currentIndex === -1) return newState;
+            parent.children.splice(currentIndex, 1);
+
+            // Insert at new position
+            parent.children.splice(newIndex, 0, nodeId);
 
             return newState;
         });
