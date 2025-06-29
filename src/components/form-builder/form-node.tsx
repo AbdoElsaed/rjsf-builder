@@ -96,8 +96,15 @@ export function FormNode({
 
   const canDrop =
     draggedItem &&
-    ((node.type === "object" && draggedItem.type !== "array") ||
-      (node.type === "array" && draggedItem.type !== "object"));
+    (() => {
+      const { engine, graph } = useSchemaGraphStore.getState();
+      return engine.canDropIntoParent(
+        graph,
+        draggedItem.type,
+        node.type,
+        nodeId
+      );
+    })();
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();

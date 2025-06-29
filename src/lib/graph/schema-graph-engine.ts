@@ -114,18 +114,28 @@ export class SchemaGraphEngine {
         parentType: string | undefined,
         parentNodeId?: string
     ): boolean {
-        if (!parentType) return true; // Root accepts anything
-        if (parentType === 'object') return true; // Objects accept anything
+        // Root accepts anything
+        if (!parentType) return true;
 
+        // Objects can accept any field type
+        if (parentType === 'object') return true;
+
+        // Arrays can accept any field type, but all items must be of the same type
         if (parentType === 'array') {
             const parentNode = parentNodeId ? graph.nodes[parentNodeId] : null;
-            return (
-                !parentNode?.children?.length ||
-                graph.nodes[parentNode.children[0]].type === childType
-            );
+
+            // If array is empty, any type is allowed
+            if (!parentNode?.children?.length) return true;
+
+            // Get the type of the first child (arrays must have consistent types)
+            const firstChildType = graph.nodes[parentNode.children[0]].type;
+
+            // Check if the new child type matches the existing array item type
+            return childType === firstChildType;
         }
 
-        return false; // Other types can't have children
+        // Other field types (string, number, boolean, etc.) cannot accept children
+        return false;
     }
 
     /**
