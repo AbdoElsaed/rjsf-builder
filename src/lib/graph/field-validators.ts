@@ -44,15 +44,15 @@ export class FieldValidators {
     }
 
     private static validateStringField(node: FieldNode, errors: string[]) {
-        if (node.validation?.minLength && node.validation?.maxLength) {
-            if (node.validation.minLength > node.validation.maxLength) {
+        if (node.minLength !== undefined && node.maxLength !== undefined) {
+            if (node.minLength > node.maxLength) {
                 errors.push('Minimum length cannot be greater than maximum length');
             }
         }
 
-        if (node.validation?.pattern) {
+        if (node.pattern) {
             try {
-                new RegExp(node.validation.pattern);
+                new RegExp(node.pattern);
             } catch {
                 errors.push('Invalid regex pattern');
             }
@@ -60,8 +60,8 @@ export class FieldValidators {
     }
 
     private static validateNumberField(node: FieldNode, errors: string[]) {
-        if (node.validation?.minimum && node.validation?.maximum) {
-            if (node.validation.minimum > node.validation.maximum) {
+        if (node.minimum !== undefined && node.maximum !== undefined) {
+            if (node.minimum > node.maximum) {
                 errors.push('Minimum value cannot be greater than maximum value');
             }
         }
@@ -93,11 +93,11 @@ export class FieldValidators {
             suggestions.push('Consider adding a description to help users understand this field');
         }
 
-        if (node.type === 'string' && !node.validation?.maxLength) {
+        if (node.type === 'string' && !node.maxLength) {
             suggestions.push('Consider setting a maximum length for better validation');
         }
 
-        if (node.type === 'number' && !node.validation?.minimum && !node.validation?.maximum) {
+        if (node.type === 'number' && !node.minimum && !node.maximum) {
             suggestions.push('Consider setting min/max values for better validation');
         }
 

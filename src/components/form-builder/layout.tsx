@@ -20,10 +20,11 @@ import {
 } from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Eye, Code } from "lucide-react";
+import { Eye, Code, Settings2 } from "lucide-react";
 import { FieldPalette } from "./field-palette";
 import { Canvas } from "./canvas";
 import { PreviewPanel } from "./preview-panel";
+import { FieldConfigPanel } from "./field-config-panel";
 import { useSchemaGraphStore } from "@/lib/store/schema-graph";
 import type { SchemaGraph, JSONSchemaType } from "@/lib/store/schema-graph";
 import {
@@ -48,6 +49,7 @@ export function FormBuilderLayout() {
   const [activeDropZone, setActiveDropZone] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [showConfig, setShowConfig] = useState(false);
   const { addNode, moveNode, reorderNode, graph } = useSchemaGraphStore();
 
   // Initialize sensors

@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { RJSFSchema } from "@rjsf/utils";
 
 export type JSONSchemaType = 'string' | 'number' | 'boolean' | 'object' | 'array' | 'enum';
+export type SchemaDefaultValue = string | number | boolean | null | Record<string, unknown> | Array<SchemaDefaultValue>;
 
 export interface FieldNode {
     id: string;
@@ -10,18 +11,58 @@ export interface FieldNode {
     title: string;
     description?: string;
     required?: boolean;
+    default?: SchemaDefaultValue;
+
+    // String field properties
+    minLength?: number;
+    maxLength?: number;
+    pattern?: string;
+    format?: string;
+
+    // Number field properties
+    minimum?: number;
+    maximum?: number;
+    multipleOf?: number;
+    exclusiveMinimum?: number;
+    exclusiveMaximum?: number;
+
+    // Array field properties
+    minItems?: number;
+    maxItems?: number;
+    uniqueItems?: boolean;
+    additionalItems?: boolean;
+
+    // Object field properties
+    minProperties?: number;
+    maxProperties?: number;
+    additionalProperties?: boolean;
+
+    // Enum field properties
     enum?: string[];
     enumNames?: string[];
-    default?: unknown;
-    children?: string[];
-    parentId?: string;
-    position?: { x: number; y: number };
+
+    // Validation properties
     validation?: {
-        minimum?: number;
-        maximum?: number;
         minLength?: number;
         maxLength?: number;
         pattern?: string;
+        minimum?: number;
+        maximum?: number;
+    };
+
+    // Tree structure properties
+    children?: string[];
+    parentId?: string;
+    position?: { x: number; y: number };
+
+    // UI properties
+    ui?: {
+        "ui:widget"?: string;
+        "ui:options"?: {
+            addable?: boolean;
+            orderable?: boolean;
+            removable?: boolean;
+        };
     };
 }
 
@@ -230,6 +271,34 @@ export class SchemaGraphEngine {
                 schema.description = node.description;
             }
 
+            // Add validation rules based on field type
+            switch (node.type) {
+                case 'string':
+                    if (node.minLength !== undefined) schema.minLength = node.minLength;
+                    if (node.maxLength !== undefined) schema.maxLength = node.maxLength;
+                    if (node.pattern !== undefined) schema.pattern = node.pattern;
+                    if (node.format !== undefined) schema.format = node.format;
+                    break;
+                case 'number':
+                    if (node.minimum !== undefined) schema.minimum = node.minimum;
+                    if (node.maximum !== undefined) schema.maximum = node.maximum;
+                    if (node.multipleOf !== undefined) schema.multipleOf = node.multipleOf;
+                    if (node.exclusiveMinimum !== undefined) schema.exclusiveMinimum = node.exclusiveMinimum;
+                    if (node.exclusiveMaximum !== undefined) schema.exclusiveMaximum = node.exclusiveMaximum;
+                    break;
+                case 'array':
+                    if (node.minItems !== undefined) schema.minItems = node.minItems;
+                    if (node.maxItems !== undefined) schema.maxItems = node.maxItems;
+                    if (node.uniqueItems !== undefined) schema.uniqueItems = node.uniqueItems;
+                    if (node.additionalItems !== undefined) schema.additionalItems = node.additionalItems;
+                    break;
+                case 'object':
+                    if (node.minProperties !== undefined) schema.minProperties = node.minProperties;
+                    if (node.maxProperties !== undefined) schema.maxProperties = node.maxProperties;
+                    if (node.additionalProperties !== undefined) schema.additionalProperties = node.additionalProperties;
+                    break;
+            }
+
             if (node.type === 'object' && node.children?.length) {
                 schema.properties = {};
                 schema.required = [];
@@ -256,6 +325,10 @@ export class SchemaGraphEngine {
 
             if (node.type === 'array' && node.children?.length) {
                 schema.items = compileNode(node.children[0]);
+            }
+
+            if (node.default !== undefined) {
+                Object.assign(schema, { default: node.default });
             }
 
             return schema;

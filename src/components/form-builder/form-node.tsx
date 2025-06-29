@@ -8,23 +8,17 @@ import {
   List,
   Layers,
   GripVertical,
-  X,
   Pencil,
-  Check,
+  X,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { useState } from "react";
 import { useSchemaGraphStore } from "@/lib/store/schema-graph";
-import { useFormDataStore } from "@/lib/store/form-data";
-import type { RJSFSchema } from "@rjsf/utils";
-import { toast } from "sonner";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { SortableContext } from "@dnd-kit/sortable";
 import { verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { FieldConfigPanel } from "./field-config-panel";
+import { Button } from "@/components/ui/button";
 
 const FIELD_ICONS = {
   string: TextQuote,
@@ -59,31 +53,22 @@ export function FormNode({
   draggedItem = null,
   activeDropZone = null,
 }: FormNodeProps) {
-  const { graph, updateNode, removeNode, compileToJsonSchema } =
-    useSchemaGraphStore();
-  const { migrateFormData } = useFormDataStore();
+  const { graph, removeNode } = useSchemaGraphStore();
   const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    key: "",
-    required: false,
-  });
   const node = graph.nodes[nodeId];
-  const Icon = FIELD_ICONS[node.type];
 
-  // Make the node sortable
   const {
+    setNodeRef,
     attributes,
     listeners,
-    setNodeRef,
     transform,
     transition,
     isDragging,
   } = useSortable({
     id: nodeId,
     data: {
-      type: node.type,
+      type: "node",
+      nodeId,
       parentId: node.parentId,
     },
   });
@@ -93,38 +78,26 @@ export function FormNode({
     transition,
   };
 
-  // Make object and array nodes droppable
-  const { setNodeRef: setDroppableRef, isOver } = useDroppable({
+  const Icon = FIELD_ICONS[node.type as keyof typeof FIELD_ICONS];
+
+  const { isOver, setNodeRef: setDroppableRef } = useDroppable({
     id: nodeId,
     data: {
-      type: node.type,
+      type: "node",
       nodeId,
-      parentId: node.parentId,
+      accepts: node.type === "array" ? ["*"] : ["node"],
     },
   });
 
-  // Check if the current dragged item can be dropped into this node
-  const canAcceptDrop = (
-    draggedType: string,
-    targetType: string,
-    targetNodeId: string
-  ): boolean => {
-    if (targetType === "object") return true; // Objects can accept any field
-    if (targetType === "array") {
-      // Arrays can only accept one type of field and must be consistent
-      const targetNode = graph.nodes[targetNodeId];
-      return (
-        !targetNode?.children?.length ||
-        graph.nodes[targetNode.children[0]].type === draggedType
-      );
-    }
-    return false; // Other field types cannot accept children
+  const setRefs = (element: HTMLElement | null) => {
+    setNodeRef(element);
+    setDroppableRef(element);
   };
 
   const canDrop =
-    draggedItem && (node.type === "object" || node.type === "array")
-      ? canAcceptDrop(draggedItem.type, node.type, nodeId)
-      : false;
+    draggedItem &&
+    ((node.type === "object" && draggedItem.type !== "array") ||
+      (node.type === "array" && draggedItem.type !== "object"));
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -133,73 +106,8 @@ export function FormNode({
 
   const handleEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setFormData({
-      title: node.title,
-      description: node.description || "",
-      key: node.key,
-      required: node.required || false,
-    });
     setIsEditing(true);
     onSelect(nodeId);
-  };
-
-  const handleSave = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    // Validate and format the key
-    const formattedKey = formData.key
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "_")
-      .replace(/_+/g, "_")
-      .replace(/^_|_$/g, "");
-
-    if (!formattedKey) {
-      toast.error("Key cannot be empty");
-      return;
-    }
-
-    // Check if the key is unique among siblings
-    const parent = node.parentId
-      ? graph.nodes[node.parentId]
-      : graph.nodes.root;
-    const siblings = parent.children || [];
-    const hasDuplicateKey = siblings.some((siblingId) => {
-      if (siblingId === nodeId) return false; // Skip self
-      const sibling = graph.nodes[siblingId];
-      return sibling.key === formattedKey;
-    });
-
-    if (hasDuplicateKey) {
-      toast.error("Key must be unique among siblings");
-      return;
-    }
-
-    // Create a copy of the current schema before updating
-    const oldSchema = compileToJsonSchema() as RJSFSchema;
-
-    // Update the node
-    updateNode(nodeId, {
-      title: formData.title,
-      description: formData.description || undefined,
-      key: formattedKey,
-      required: formData.required,
-    });
-
-    // Create a copy of the updated schema
-    const newSchema = compileToJsonSchema() as RJSFSchema;
-
-    // If the key has changed, migrate the form data
-    if (node.key !== formattedKey) {
-      migrateFormData(oldSchema, newSchema);
-    }
-
-    setIsEditing(false);
-    onSelect(null);
-  };
-
-  const handleCancel = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsEditing(false);
-    onSelect(null);
   };
 
   const baseClasses = cn(
@@ -227,181 +135,95 @@ export function FormNode({
     isEditing && "ring-1 ring-primary/20 bg-muted/50"
   );
 
-  const renderContent = () => {
-    if (isEditing) {
-      return (
-        <div className="flex-1 space-y-2">
-          <div className="flex items-center gap-2">
-            <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-            <div className="flex-1 space-y-2">
-              <div className="flex items-center gap-2">
-                <Input
-                  value={formData.title}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, title: e.target.value }))
-                  }
-                  placeholder="Enter field label"
-                  className="h-7 text-sm flex-1"
-                />
-                <div className="flex items-center gap-1">
-                  <Label htmlFor="required" className="text-xs">
-                    Required
-                  </Label>
-                  <Switch
-                    id="required"
-                    checked={formData.required}
-                    onCheckedChange={(checked) =>
-                      setFormData((prev) => ({ ...prev, required: checked }))
-                    }
-                    className="scale-75"
-                  />
-                </div>
-              </div>
-              <Input
-                value={formData.key}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, key: e.target.value }))
-                }
-                placeholder="Enter field key"
-                className="h-7 text-sm"
-              />
-              <Input
-                value={formData.description}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    description: e.target.value,
-                  }))
-                }
-                placeholder="Enter description"
-                className="h-7 text-sm"
-              />
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="flex items-center gap-2 flex-1">
-        <Icon className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-medium">{node.title}</span>
-        <span className="text-xs text-muted-foreground">({node.key})</span>
-        {node.description && (
-          <span className="text-xs text-muted-foreground">
-            ({node.description})
-          </span>
-        )}
-        {node.required && <span className="text-xs text-primary">*</span>}
-      </div>
-    );
-  };
-
-  // Combine sortable and droppable refs if needed
-  const setRefs = (element: HTMLDivElement) => {
-    setNodeRef(element);
-    if (node.type === "object" || node.type === "array") {
-      setDroppableRef(element);
-    }
-  };
-
   return (
-    <div
-      ref={setRefs}
-      style={style}
-      {...attributes}
-      className={cn(baseClasses, "p-3 hover:bg-accent")}
-    >
-      <div className="flex items-start gap-3">
-        <div
-          {...(isEditing ? {} : listeners)}
-          className={cn(
-            "rounded p-1 hover:bg-accent",
-            isEditing
-              ? "opacity-50 cursor-not-allowed"
-              : "cursor-grab touch-none active:cursor-grabbing"
-          )}
+    <div ref={setRefs} style={style} className={baseClasses}>
+      <div className="flex items-center gap-2 p-1.5 min-w-0">
+        <button
+          {...attributes}
+          {...listeners}
+          className="touch-none flex-shrink-0"
+          onClick={(e) => e.stopPropagation()}
         >
-          <GripVertical className="h-4 w-4 text-muted-foreground" />
-        </div>
-
-        {/* Content section */}
-        {renderContent()}
-
-        {/* Action buttons */}
-        <div
-          className={cn(
-            "flex items-center gap-1",
-            !isEditing && "opacity-0 transition-opacity group-hover:opacity-100"
-          )}
-        >
-          {isEditing ? (
-            <>
+          <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab active:cursor-grabbing" />
+        </button>
+        {isEditing ? (
+          <div className="flex-1">
+            <FieldConfigPanel
+              nodeId={nodeId}
+              onSave={() => {
+                setIsEditing(false);
+                onSelect(null);
+              }}
+              onCancel={() => {
+                setIsEditing(false);
+                onSelect(null);
+              }}
+            />
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 min-w-0 flex items-center gap-2">
+              <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <span className="text-sm font-medium truncate">{node.title}</span>
+              <span className="text-xs text-muted-foreground truncate">
+                ({node.key})
+              </span>
+              {node.description && (
+                <span className="text-xs text-muted-foreground truncate">
+                  ({node.description})
+                </span>
+              )}
+              {node.required && (
+                <span className="text-xs text-primary flex-shrink-0">*</span>
+              )}
+            </div>
+            <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 flex-shrink-0">
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7"
-                onClick={handleCancel}
-              >
-                <X className="h-3 w-3" />
-                <span className="sr-only">Cancel</span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={handleSave}
-              >
-                <Check className="h-3 w-3" />
-                <span className="sr-only">Save</span>
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
+                className="h-6 w-6"
                 onClick={handleEdit}
               >
-                <Pencil className="h-4 w-4" />
+                <Pencil className="h-3.5 w-3.5" />
                 <span className="sr-only">Edit</span>
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 text-destructive hover:text-destructive"
+                className="h-6 w-6 text-destructive hover:text-destructive"
                 onClick={handleDelete}
               >
-                <X className="h-4 w-4" />
+                <X className="h-3.5 w-3.5" />
                 <span className="sr-only">Delete</span>
               </Button>
-            </>
-          )}
-        </div>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Render children for object and array types */}
+      {/* Children container for object and array types */}
       {(node.type === "object" || node.type === "array") && (
         <div
           className={cn(
-            "mt-2 space-y-2 border-l pl-4 transition-all duration-200",
+            "mt-0.5 space-y-0.5 border-l-2 ml-4 pl-4 transition-all duration-200",
             // Enhanced visual feedback for child drop zones
             globalIsDragging && canDrop && "border-primary/40",
             globalIsDragging && !canDrop && "border-destructive/30",
             activeDropZone === nodeId &&
               canDrop &&
               !node.children?.length &&
-              "min-h-[60px] border border-dashed border-primary/50 rounded-lg bg-primary/5",
+              "min-h-[32px] border border-dashed border-primary/50 rounded-lg bg-primary/5",
             activeDropZone === nodeId &&
               !canDrop &&
               !node.children?.length &&
-              "min-h-[60px] border border-dashed border-destructive/50 rounded-lg bg-destructive/5",
+              "min-h-[32px] border border-dashed border-destructive/50 rounded-lg bg-destructive/5",
             // Legacy hover state
             !globalIsDragging &&
               isOver &&
               !node.children?.length &&
-              "min-h-[100px] border border-dashed border-primary/50 rounded-lg"
+              "min-h-[40px] border border-dashed border-primary/50 rounded-lg",
+            // Add bottom padding only when there are children
+            node.children?.length ? "pb-0.5" : ""
           )}
         >
           {node.children && node.children.length > 0 ? (
@@ -422,7 +244,7 @@ export function FormNode({
               ))}
             </SortableContext>
           ) : (
-            <div className="flex items-center justify-center h-full text-sm text-muted-foreground py-4">
+            <div className="flex items-center justify-center h-full text-xs text-muted-foreground py-1.5">
               {globalIsDragging ? (
                 canDrop ? (
                   <span className="text-primary font-medium">
