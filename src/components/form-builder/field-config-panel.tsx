@@ -27,6 +27,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
+import { getNodePath } from "@/lib/utils";
 
 interface FieldConfigPanelProps {
   nodeId: string | null;
@@ -42,7 +43,7 @@ export function FieldConfigPanel({
   onCancel,
 }: FieldConfigPanelProps) {
   const { graph, updateNode, compileToJsonSchema } = useSchemaGraphStore();
-  const { updateFieldUiSchema } = useUiSchemaStore();
+  const { updateFieldUiSchema, removeFieldUiSchema } = useUiSchemaStore();
   const { migrateFormData } = useFormDataStore();
 
   // Store both form data and node-specific config in local state
@@ -133,6 +134,9 @@ export function FieldConfigPanel({
     // Create a copy of the current schema before updating
     const oldSchema = compileToJsonSchema() as RJSFSchema;
 
+    // Get the current node path before updating
+    const oldPath = nodeConfig ? getNodePath(graph, nodeId) : "";
+
     // Update the node with all accumulated changes
     const updatedNode = {
       ...nodeConfig,
@@ -147,14 +151,21 @@ export function FieldConfigPanel({
     // Create a copy of the updated schema
     const newSchema = compileToJsonSchema() as RJSFSchema;
 
-    // If the key has changed, migrate the form data
-    if (nodeConfig.key !== formattedKey) {
-      migrateFormData(oldSchema, newSchema);
-    }
+    // Get the new node path after updating
+    const newPath = getNodePath(graph, nodeId);
 
-    // Update UI schema if needed
-    if (nodeConfig.ui) {
-      updateFieldUiSchema(formattedKey, nodeConfig.ui);
+    // If the key has changed, migrate the form data and update UI schema path
+    if (oldPath !== newPath) {
+      migrateFormData(oldSchema, newSchema);
+      if (nodeConfig?.ui) {
+        // Remove the old UI schema entry
+        removeFieldUiSchema(oldPath);
+        // Add the new UI schema entry
+        updateFieldUiSchema(newPath, nodeConfig.ui);
+      }
+    } else if (nodeConfig?.ui) {
+      // Just update the UI schema if the path hasn't changed
+      updateFieldUiSchema(newPath, nodeConfig.ui);
     }
 
     onSave?.();
