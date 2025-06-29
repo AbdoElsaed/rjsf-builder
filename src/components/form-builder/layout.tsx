@@ -80,26 +80,8 @@ export function FormBuilderLayout() {
     parentType: string | undefined,
     parentNodeId?: string
   ) => {
-    // Root can accept any field
-    if (!parentType) return true;
-
-    // Objects can accept any field
-    if (parentType === "object") return true;
-
-    // Arrays can only accept one type of field and must be consistent
-    if (parentType === "array") {
-      // Get the specific parent node being checked
-      const parentNode = parentNodeId ? graph.nodes[parentNodeId] : null;
-
-      // If array is empty or matches the existing child type
-      return (
-        !parentNode?.children?.length ||
-        graph.nodes[parentNode.children[0]].type === childType
-      );
-    }
-
-    // Other field types cannot accept children
-    return false;
+    const { engine, graph } = useSchemaGraphStore.getState();
+    return engine.canDropIntoParent(graph, childType, parentType, parentNodeId);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -138,21 +120,12 @@ export function FormBuilderLayout() {
 
       // Create a new node
       const title = `New ${activeData.label}`;
-      const baseKey = title
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, "_")
-        .replace(/_+/g, "_")
-        .replace(/^_|_$/g, "");
-
-      // Add random number suffix to ensure uniqueness
-      const randomSuffix = Math.floor(Math.random() * 1000);
-      const uniqueKey = `${baseKey}_${randomSuffix}`;
 
       addNode(
         {
           type: activeData.type as JSONSchemaType,
           title,
-          key: uniqueKey,
+          key: "", // Engine will generate unique key
         },
         targetParentId
       );
@@ -207,12 +180,8 @@ export function FormBuilderLayout() {
     targetId: string,
     graph: SchemaGraph
   ): boolean => {
-    let current = graph.nodes[targetId];
-    while (current?.parentId) {
-      if (current.parentId === nodeId) return true;
-      current = graph.nodes[current.parentId];
-    }
-    return false;
+    const { engine } = useSchemaGraphStore.getState();
+    return engine.isDescendant(graph, nodeId, targetId);
   };
 
   return (
