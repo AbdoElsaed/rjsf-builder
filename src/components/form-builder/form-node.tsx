@@ -18,6 +18,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useState } from "react";
 import { useSchemaGraphStore } from "@/lib/store/schema-graph";
+import { useFormDataStore } from "@/lib/store/form-data";
+import type { RJSFSchema } from "@rjsf/utils";
 import { toast } from "sonner";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -57,7 +59,9 @@ export function FormNode({
   draggedItem = null,
   activeDropZone = null,
 }: FormNodeProps) {
-  const { graph, updateNode, removeNode } = useSchemaGraphStore();
+  const { graph, updateNode, removeNode, compileToJsonSchema } =
+    useSchemaGraphStore();
+  const { migrateFormData } = useFormDataStore();
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     title: "",
@@ -169,12 +173,25 @@ export function FormNode({
       return;
     }
 
+    // Create a copy of the current schema before updating
+    const oldSchema = compileToJsonSchema() as RJSFSchema;
+
+    // Update the node
     updateNode(nodeId, {
       title: formData.title,
       description: formData.description || undefined,
       key: formattedKey,
       required: formData.required,
     });
+
+    // Create a copy of the updated schema
+    const newSchema = compileToJsonSchema() as RJSFSchema;
+
+    // If the key has changed, migrate the form data
+    if (node.key !== formattedKey) {
+      migrateFormData(oldSchema, newSchema);
+    }
+
     setIsEditing(false);
     onSelect(null);
   };
