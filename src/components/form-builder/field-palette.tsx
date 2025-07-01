@@ -1,6 +1,13 @@
 import { useDraggable } from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
-import { Type, TextQuote, ToggleLeft, Hash, Layers } from "lucide-react";
+import {
+  Type,
+  TextQuote,
+  ToggleLeft,
+  Hash,
+  Layers,
+  GitBranch,
+} from "lucide-react";
 
 interface FieldTypeItem {
   id: string;
@@ -39,6 +46,12 @@ const FIELD_TYPES: FieldTypeItem[] = [
     type: "array",
     icon: Layers,
     label: "List",
+  },
+  {
+    id: "if-block",
+    type: "if_block",
+    icon: GitBranch,
+    label: "If-Then-Else",
   },
 ];
 

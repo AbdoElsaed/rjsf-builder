@@ -50,7 +50,8 @@ export function FormBuilderLayout() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
-  const { addNode, moveNode, reorderNode, graph } = useSchemaGraphStore();
+  const { addNode, moveNode, reorderNode, graph, updateNode } =
+    useSchemaGraphStore();
 
   // Initialize sensors
   const sensors = useSensors(
@@ -73,8 +74,60 @@ export function FormBuilderLayout() {
   };
 
   const handleDragOver = (event: DragOverEvent) => {
-    const { over } = event;
-    setActiveDropZone(over ? String(over.id) : null);
+    const { over, active } = event;
+    const { engine } = useSchemaGraphStore.getState();
+
+    // Clear active drop zone if not hovering over anything
+    if (!over) {
+      setActiveDropZone(null);
+      return;
+    }
+
+    const overId = over.id;
+    const activeData = active.data.current as DraggedItem;
+
+    // Handle dropping into then/else zones of IF blocks
+    if (
+      typeof overId === "string" &&
+      (overId.endsWith("_then") || overId.endsWith("_else"))
+    ) {
+      const [parentId] = overId.split("_");
+      const parentNode = graph.nodes[parentId];
+
+      // Only allow dropping fields into if block zones
+      if (parentNode.type === "if_block") {
+        setActiveDropZone(overId);
+      } else {
+        setActiveDropZone(null);
+      }
+      return;
+    }
+
+    // For regular nodes, check if we can drop here
+    const overData = over.data.current as {
+      type?: string;
+      parentId?: string;
+    } | null;
+    const targetNodeId = typeof overId === "string" ? overId : undefined;
+    const targetNode = targetNodeId ? graph.nodes[targetNodeId] : null;
+
+    // If dragging an existing node, prevent dropping into itself or its descendants
+    if (typeof active.id === "string" && targetNodeId) {
+      const isValidMove = !engine.isDescendant(graph, active.id, targetNodeId);
+      if (!isValidMove) {
+        setActiveDropZone(null);
+        return;
+      }
+    }
+
+    // Check if we can drop this type into the target
+    const canDrop = canDropIntoParent(
+      activeData?.type || "",
+      targetNode?.type,
+      targetNodeId
+    );
+
+    setActiveDropZone(canDrop ? String(overId) : null);
   };
 
   const canDropIntoParent = (
@@ -83,6 +136,12 @@ export function FormBuilderLayout() {
     parentNodeId?: string
   ) => {
     const { engine, graph } = useSchemaGraphStore.getState();
+
+    // Don't allow dropping into non-container types (except if_block which is handled separately)
+    if (parentType && !["object", "array", "if_block"].includes(parentType)) {
+      return false;
+    }
+
     return engine.canDropIntoParent(graph, childType, parentType, parentNodeId);
   };
 
@@ -102,6 +161,100 @@ export function FormBuilderLayout() {
 
     const activeData = active.data.current;
     const overData = over.data.current;
+
+    // Handle dropping into then/else zones of IF blocks
+    if (
+      typeof overId === "string" &&
+      (overId.endsWith("_then") || overId.endsWith("_else"))
+    ) {
+      const [parentId, zone] = overId.split("_");
+      const parentNode = graph.nodes[parentId];
+
+      if (parentNode.type === "if_block") {
+        // Check if the node already exists in either branch
+        const existsInThen = parentNode.then?.includes(activeId as string);
+        const existsInElse = parentNode.else?.includes(activeId as string);
+
+        // If node exists in the other branch, remove it first
+        if (zone === "then" && existsInElse) {
+          updateNode(parentId, {
+            ...parentNode,
+            else: parentNode.else?.filter((id) => id !== activeId),
+          });
+        } else if (zone === "else" && existsInThen) {
+          updateNode(parentId, {
+            ...parentNode,
+            then: parentNode.then?.filter((id) => id !== activeId),
+          });
+        }
+
+        if (activeData?.type && !graph.nodes[activeId as string]) {
+          // Create new node
+          const title = `New ${activeData.label}`;
+          const nodeData = {
+            type: activeData.type as JSONSchemaType,
+            title,
+            key: "",
+          };
+
+          // Add to root first
+          addNode(nodeData, "root");
+
+          // Get the latest graph state
+          const currentGraph = useSchemaGraphStore.getState().graph;
+          const rootNode = currentGraph.nodes.root;
+          const newNodeId = rootNode.children?.[rootNode.children.length - 1];
+
+          if (newNodeId) {
+            // Update the IF block's then/else array
+            const updates = {
+              ...parentNode,
+              [zone]: [
+                ...(parentNode[zone as "then" | "else"] || []),
+                newNodeId,
+              ],
+            };
+            updateNode(parentId, updates);
+
+            // Remove from root since it's now in the IF block
+            updateNode("root", {
+              ...rootNode,
+              children: rootNode.children?.filter((id) => id !== newNodeId),
+            });
+          }
+        } else if (typeof activeId === "string") {
+          // Move existing node
+          const activeNode = graph.nodes[activeId];
+
+          // Remove from old parent if needed
+          if (activeNode.parentId) {
+            const oldParent = graph.nodes[activeNode.parentId];
+            if (oldParent.type === "if_block") {
+              // Remove from then/else arrays if present
+              updateNode(activeNode.parentId, {
+                ...oldParent,
+                then: oldParent.then?.filter((id) => id !== activeId),
+                else: oldParent.else?.filter((id) => id !== activeId),
+              });
+            } else {
+              // Remove from children array
+              updateNode(activeNode.parentId, {
+                ...oldParent,
+                children: oldParent.children?.filter((id) => id !== activeId),
+              });
+            }
+          }
+
+          // Add to new branch
+          const updates = {
+            ...parentNode,
+            [zone]: [...(parentNode[zone as "then" | "else"] || []), activeId],
+          };
+          updateNode(parentId, updates);
+        }
+        return;
+      }
+    }
 
     // Case 1: Dropping a new field from the palette
     if (activeData?.type && !graph.nodes[activeId as string]) {

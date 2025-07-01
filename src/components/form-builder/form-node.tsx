@@ -10,6 +10,7 @@ import {
   GripVertical,
   Pencil,
   X,
+  GitBranch,
 } from "lucide-react";
 import { useState } from "react";
 import { useSchemaGraphStore } from "@/lib/store/schema-graph";
@@ -19,6 +20,8 @@ import { SortableContext } from "@dnd-kit/sortable";
 import { verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { FieldConfigPanel } from "./field-config-panel";
 import { Button } from "@/components/ui/button";
+import type { FormNodeProps } from "./types";
+import { IfBlock } from "./if-block";
 
 const FIELD_ICONS = {
   string: TextQuote,
@@ -27,23 +30,8 @@ const FIELD_ICONS = {
   enum: List,
   object: Type,
   array: Layers,
+  if_block: GitBranch,
 } as const;
-
-interface DraggedItem {
-  type: string;
-  label?: string;
-  nodeId?: string;
-  parentId?: string;
-}
-
-interface FormNodeProps {
-  nodeId: string;
-  selectedNodeId: string | null;
-  onSelect: (nodeId: string | null) => void;
-  isDragging?: boolean;
-  draggedItem?: DraggedItem | null;
-  activeDropZone?: string | null;
-}
 
 export function FormNode({
   nodeId,
@@ -52,6 +40,7 @@ export function FormNode({
   isDragging: globalIsDragging = false,
   draggedItem = null,
   activeDropZone = null,
+  onRemove,
 }: FormNodeProps) {
   const { graph, removeNode } = useSchemaGraphStore();
   const [isEditing, setIsEditing] = useState(false);
@@ -108,7 +97,11 @@ export function FormNode({
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
-    removeNode(nodeId);
+    if (onRemove) {
+      onRemove();
+    } else {
+      removeNode(nodeId);
+    }
   };
 
   const handleEdit = (e: React.MouseEvent) => {
@@ -141,6 +134,46 @@ export function FormNode({
     node.type === "object" && "border-primary/20",
     isEditing && "ring-1 ring-primary/20 bg-muted/50"
   );
+
+  // Special rendering for IF blocks
+  if (node.type === "if_block") {
+    return (
+      <div ref={setRefs} style={style} className={baseClasses}>
+        <div className="flex items-center gap-2 p-1.5 min-w-0">
+          <button
+            {...attributes}
+            {...listeners}
+            className="touch-none flex-shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab active:cursor-grabbing" />
+          </button>
+          {isEditing ? (
+            <div className="flex-1">
+              <FieldConfigPanel
+                nodeId={nodeId}
+                onSave={() => {
+                  setIsEditing(false);
+                  onSelect(null);
+                }}
+                onCancel={() => {
+                  setIsEditing(false);
+                  onSelect(null);
+                }}
+              />
+            </div>
+          ) : (
+            <IfBlock
+              nodeId={nodeId}
+              isDragging={globalIsDragging}
+              draggedItem={draggedItem || undefined}
+              activeDropZone={activeDropZone}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div ref={setRefs} style={style} className={baseClasses}>

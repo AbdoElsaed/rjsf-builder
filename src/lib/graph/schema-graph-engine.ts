@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { RJSFSchema } from "@rjsf/utils";
 
-export type JSONSchemaType = 'string' | 'number' | 'boolean' | 'object' | 'array' | 'enum';
+export type JSONSchemaType = 'string' | 'number' | 'boolean' | 'object' | 'array' | 'enum' | 'if_block';
 export type SchemaDefaultValue = string | number | boolean | null | Record<string, unknown> | Array<SchemaDefaultValue>;
 
 export interface FieldNode {
@@ -41,6 +41,15 @@ export interface FieldNode {
     enum?: string[];
     enumNames?: string[];
 
+    // IF block properties
+    condition?: {
+        field: string;
+        operator: string;
+        value: unknown;
+    };
+    then?: string[];
+    else?: string[];
+
     // Validation properties
     validation?: {
         minLength?: number;
@@ -64,6 +73,9 @@ export interface FieldNode {
             removable?: boolean;
         };
     };
+
+    // New dependencies property
+    dependencies?: Record<string, unknown>;
 }
 
 export interface SchemaGraph {
@@ -270,10 +282,137 @@ export class SchemaGraphEngine {
      * Converts the graph to a JSON Schema
      */
     compileToJsonSchema(graph: SchemaGraph): RJSFSchema {
+        const ifBlocks: RJSFSchema[] = [];
+        const skipNodes = new Set<string>();
+
         const compileNode = (nodeId: string): RJSFSchema => {
             const node = graph.nodes[nodeId];
+
+            // Handle IF blocks by collecting them for later
+            if (node.type === 'if_block') {
+                const thenSchema: RJSFSchema = {
+                    properties: {},
+                };
+
+                // Initialize elseSchema based on whether we have else nodes
+                const elseSchema: RJSFSchema | undefined = node.else?.length ? {
+                    type: 'object' as const,
+                    properties: {},
+                } : undefined;
+
+                // Compile then branch
+                const thenRequired: string[] = [];
+                if (node.then?.length) {
+                    node.then.forEach((childId) => {
+                        const childNode = graph.nodes[childId];
+                        skipNodes.add(childId); // Skip these nodes in main properties
+                        if (thenSchema.properties) {
+                            thenSchema.properties[childNode.key] = compileNode(childId);
+                            if (childNode.required) {
+                                thenRequired.push(childNode.key);
+                            }
+                        }
+                    });
+                }
+                if (thenRequired.length > 0) {
+                    thenSchema.required = thenRequired;
+                }
+
+                // Compile else branch
+                if (elseSchema && node.else?.length) {
+                    const elseRequired: string[] = [];
+                    node.else.forEach((childId) => {
+                        const childNode = graph.nodes[childId];
+                        skipNodes.add(childId); // Skip these nodes in main properties
+                        if (elseSchema.properties) {
+                            elseSchema.properties[childNode.key] = compileNode(childId);
+                            if (childNode.required) {
+                                elseRequired.push(childNode.key);
+                            }
+                        }
+                    });
+                    if (elseRequired.length > 0) {
+                        elseSchema.required = elseRequired;
+                    }
+                }
+
+                // Create the if condition with proper type handling
+                const conditionValue = node.condition?.value;
+                const conditionField = node.condition?.field || '';
+                const operator = node.condition?.operator || 'equals';
+
+                // Helper to create a comparison condition with proper type handling
+                const createComparison = (op: string, value: unknown): RJSFSchema => {
+                    // Get the type of the referenced field
+                    const referencedField = Object.values(graph.nodes).find(n => n.key === conditionField);
+                    const fieldType = referencedField?.type || 'string';
+
+                    // Convert value to proper type
+                    const typedValue = fieldType === 'number' ? Number(value) :
+                        fieldType === 'boolean' ? Boolean(value) :
+                            String(value);
+
+                    switch (op) {
+                        case 'equals':
+                            return { const: typedValue };
+                        case 'not_equals':
+                            return { not: { const: typedValue } };
+                        case 'greater_than':
+                            return { type: 'number' as const, exclusiveMinimum: Number(typedValue) };
+                        case 'less_than':
+                            return { type: 'number' as const, exclusiveMaximum: Number(typedValue) };
+                        case 'greater_equal':
+                            return { type: 'number' as const, minimum: Number(typedValue) };
+                        case 'less_equal':
+                            return { type: 'number' as const, maximum: Number(typedValue) };
+                        case 'contains':
+                            return { type: 'string' as const, pattern: String(value) };
+                        case 'starts_with':
+                            return { type: 'string' as const, pattern: `^${String(value)}` };
+                        case 'ends_with':
+                            return { type: 'string' as const, pattern: `${String(value)}$` };
+                        case 'empty':
+                            return {
+                                oneOf: [
+                                    { type: 'string' as const, maxLength: 0 },
+                                    { type: 'null' as const }
+                                ]
+                            };
+                        case 'not_empty':
+                            return {
+                                allOf: [
+                                    { type: 'string' as const },
+                                    { minLength: 1 }
+                                ]
+                            };
+                        default:
+                            return { const: typedValue };
+                    }
+                };
+
+                // Build the if/then/else schema
+                const ifCondition: RJSFSchema = {
+                    properties: {
+                        [conditionField]: createComparison(operator, conditionValue)
+                    },
+                    required: [conditionField]
+                };
+
+                const conditionalSchema: RJSFSchema = {
+                    if: ifCondition,
+                    then: thenSchema,
+                    ...(elseSchema ? { else: elseSchema } : {})
+                };
+
+                // Add to the list of if blocks
+                ifBlocks.push(conditionalSchema);
+                skipNodes.add(nodeId); // Skip the if block node itself
+                return {}; // Return empty schema since we'll handle this in allOf
+            }
+
+            // Regular node handling
             const schema: RJSFSchema = {
-                type: node.type === 'enum' ? 'string' : node.type,
+                type: getSchemaType(node.type),
                 title: node.title,
             };
 
@@ -344,7 +483,45 @@ export class SchemaGraphEngine {
             return schema;
         };
 
-        return compileNode('root');
+        // Helper to convert our internal types to JSON Schema types
+        function getSchemaType(type: JSONSchemaType): 'string' | 'number' | 'boolean' | 'object' | 'array' {
+            switch (type) {
+                case 'enum':
+                case 'string':
+                    return 'string';
+                case 'if_block':
+                    return 'object';
+                default:
+                    return type;
+            }
+        }
+
+        // Compile the main schema
+        const mainSchema = compileNode('root');
+
+        // Filter out skipped nodes from main properties
+        if (mainSchema.properties) {
+            const filteredProperties: Record<string, RJSFSchema> = {};
+            Object.entries(mainSchema.properties).forEach(([key, value]) => {
+                // Find the node ID by key
+                const matchingNode = Object.entries(graph.nodes).find(entry => entry[1].key === key);
+                const nodeId = matchingNode?.[0];
+                if (!nodeId || !skipNodes.has(nodeId)) {
+                    filteredProperties[key] = value as RJSFSchema;
+                }
+            });
+            mainSchema.properties = filteredProperties;
+        }
+
+        // If we have if blocks, add them using allOf
+        if (ifBlocks.length > 0) {
+            return {
+                ...mainSchema,
+                allOf: ifBlocks
+            };
+        }
+
+        return mainSchema;
     }
 
     /**

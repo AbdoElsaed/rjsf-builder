@@ -79,6 +79,19 @@ export interface EnumFieldConfig extends BaseFieldConfig {
     };
 }
 
+// IF block specific configuration
+export interface IfBlockConfig extends BaseFieldConfig {
+    type: "if_block";
+    condition?: {
+        field: string;
+        operator: "equals" | "not_equals" | "greater_than" | "less_than" | "greater_equal" | "less_equal" | "contains" | "starts_with" | "ends_with" | "empty" | "not_empty";
+        value: unknown;
+    };
+    then?: string[];  // Array of node IDs for the then branch
+    else?: string[];  // Array of node IDs for the else branch
+    ui?: UiSchema;
+}
+
 // Union type of all field configurations
 export type FieldConfig =
     | StringFieldConfig
@@ -86,7 +99,8 @@ export type FieldConfig =
     | BooleanFieldConfig
     | ArrayFieldConfig
     | ObjectFieldConfig
-    | EnumFieldConfig;
+    | EnumFieldConfig
+    | IfBlockConfig;
 
 // Helper to get the appropriate configuration type based on field type
 export function getDefaultConfig(type: JSONSchemaType): FieldConfig {
@@ -103,6 +117,8 @@ export function getDefaultConfig(type: JSONSchemaType): FieldConfig {
             return { type, title: "", ui: {} };
         case "enum":
             return { type, title: "", enum: [], ui: {} };
+        case "if_block":
+            return { type, title: "", ui: {} };
         default:
             throw new Error(`Unsupported field type: ${type}`);
     }
