@@ -11,9 +11,13 @@ import {
   X,
   GitBranch,
   Settings2,
+  ArrowRight,
 } from "lucide-react";
-import { useState } from "react";
-import { useSchemaGraphStore } from "@/lib/store/schema-graph";
+import { useState, useEffect } from "react";
+import {
+  useSchemaGraphStore,
+  type SchemaGraph,
+} from "@/lib/store/schema-graph";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { SortableContext } from "@dnd-kit/sortable";
@@ -33,6 +37,17 @@ const FIELD_ICONS = {
   if_block: GitBranch,
 } as const;
 
+// Calculate nesting depth for visual indicators
+const calculateDepth = (graph: SchemaGraph, nodeId: string): number => {
+  let depth = 0;
+  let currentNode = graph.nodes[nodeId];
+  while (currentNode?.parentId && currentNode.parentId !== "root") {
+    depth++;
+    currentNode = graph.nodes[currentNode.parentId];
+  }
+  return depth;
+};
+
 export function FormNode({
   nodeId,
   selectedNodeId,
@@ -44,7 +59,13 @@ export function FormNode({
 }: FormNodeProps) {
   const { graph, removeNode } = useSchemaGraphStore();
   const [isEditing, setIsEditing] = useState(false);
+  const [nestingDepth, setNestingDepth] = useState(0);
   const node = graph.nodes[nodeId];
+
+  // Calculate and update nesting depth
+  useEffect(() => {
+    setNestingDepth(calculateDepth(graph, nodeId));
+  }, [graph, nodeId]);
 
   const {
     setNodeRef,
@@ -109,9 +130,16 @@ export function FormNode({
     onSelect(nodeId);
   };
 
+  // Add depth indicator styles
+  const depthIndicatorClasses = cn(
+    "absolute -left-3 top-0 bottom-0 border-l-2 opacity-0 transition-opacity",
+    globalIsDragging && "opacity-100",
+    canDrop ? "border-primary/30" : "border-muted"
+  );
+
   const baseClasses = cn(
     "group relative rounded-lg border bg-card shadow-sm transition-all duration-200",
-    isDragging && "opacity-50",
+    isDragging && "opacity-50 scale-105 rotate-1",
     // Enhanced visual feedback for droppable nodes
     globalIsDragging &&
       (node.type === "object" || node.type === "array") &&
@@ -132,11 +160,11 @@ export function FormNode({
     isEditing && "ring-1 ring-primary/20 bg-muted/50"
   );
 
-  // Add nested drop zone styles
+  // Add nested drop zone styles with improved depth indicators
   const nestedDropZoneClasses = cn(
     "mt-0.5 space-y-0.5 transition-all duration-200",
-    // Container styles
-    "border-l-2 ml-4 pl-4",
+    // Container styles with depth indicator
+    "relative border-l-2 ml-4 pl-4",
     // Enhanced visual feedback for child drop zones
     globalIsDragging && canDrop && "border-primary/40",
     globalIsDragging && !canDrop && "border-destructive/30",
@@ -158,10 +186,21 @@ export function FormNode({
     node.children?.length ? "pb-0.5" : ""
   );
 
+  // Render depth indicators
+  const renderDepthIndicators = () => {
+    return Array.from({ length: nestingDepth }).map((_, index) => (
+      <div
+        key={index}
+        className={cn(depthIndicatorClasses, `left-${-(index + 1) * 3}`)}
+      />
+    ));
+  };
+
   // Special rendering for IF blocks
   if (node.type === "if_block") {
     return (
       <div ref={setRefs} style={style} className={baseClasses}>
+        {renderDepthIndicators()}
         <div className="flex items-center gap-2 p-1.5 min-w-0">
           <button
             {...attributes}
@@ -201,6 +240,7 @@ export function FormNode({
 
   return (
     <div ref={setRefs} style={style} className={baseClasses}>
+      {renderDepthIndicators()}
       <div className="flex items-center gap-2 p-1.5 min-w-0">
         <button
           {...attributes}
@@ -237,6 +277,13 @@ export function FormNode({
                 </span>
               )}
             </div>
+            {/* Show nesting path on hover when dragging */}
+            {globalIsDragging && nestingDepth > 0 && (
+              <div className="hidden group-hover:flex items-center gap-1 text-xs text-muted-foreground">
+                <ArrowRight className="h-3 w-3" />
+                <span>Depth: {nestingDepth}</span>
+              </div>
+            )}
             <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
               <Button
                 variant="ghost"

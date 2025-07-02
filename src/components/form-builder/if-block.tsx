@@ -68,86 +68,107 @@ export function IfBlock({
     disabled: !isConditionValid, // Disable drop zone if condition is not valid
   });
 
-  // Get all available fields for comparison
+  // Get all available fields for comparison according to RJSF rules
   const getAvailableFields = () => {
     const fields: { id: string; key: string; title: string }[] = [];
-    const visitedKeys = new Set<string>();
+    const visitedIds = new Set<string>();
 
+    // Helper to add a field if not already added
     const addField = (field: { id: string; key: string; title: string }) => {
-      if (!visitedKeys.has(field.key)) {
-        visitedKeys.add(field.key);
+      if (!visitedIds.has(field.id)) {
+        visitedIds.add(field.id);
         fields.push(field);
       }
     };
 
-    const traverse = (currentNodeId: string) => {
-      const currentNode = graph.nodes[currentNodeId];
-      if (!currentNode) return;
+    // Get the path from root to current node
+    const getNodePath = (startNodeId: string): string[] => {
+      const path: string[] = [];
+      let currentId = startNodeId;
 
-      // Add the current node if it's a valid field type (not an if_block, object, or array)
-      // and it's not inside the current if block's then/else branches
-      if (
-        !["if_block", "object", "array"].includes(currentNode.type) &&
-        !node.then?.includes(currentNodeId) &&
-        !node.else?.includes(currentNodeId)
-      ) {
-        addField({
-          id: currentNode.id,
-          key: currentNode.key,
-          title: currentNode.title,
-        });
+      while (currentId && currentId !== "root") {
+        const currentNode = graph.nodes[currentId];
+        if (!currentNode?.parentId) break;
+        path.unshift(currentId);
+        currentId = currentNode.parentId;
       }
 
-      // Only traverse up to parent and siblings at the same level
-      if (currentNode.parentId) {
-        const parent = graph.nodes[currentNode.parentId];
+      return path;
+    };
 
-        // Add parent's siblings (fields at the same level as parent)
-        if (parent.parentId) {
-          const grandParent = graph.nodes[parent.parentId];
-          grandParent.children?.forEach((siblingId) => {
-            if (siblingId !== parent.id) {
-              const sibling = graph.nodes[siblingId];
-              if (
-                sibling &&
-                !["if_block", "object", "array"].includes(sibling.type)
-              ) {
-                addField({
-                  id: sibling.id,
-                  key: sibling.key,
-                  title: sibling.title,
-                });
-              }
-            }
+    // Build set of nodes to exclude (current if block and its contents)
+    const buildExcludeSet = (ifBlockId: string): Set<string> => {
+      const excludeIds = new Set<string>([ifBlockId]);
+      const ifBlock = graph.nodes[ifBlockId];
+
+      // Add then branch nodes
+      ifBlock.then?.forEach((id) => {
+        excludeIds.add(id);
+        const node = graph.nodes[id];
+        if (node?.children) {
+          node.children.forEach((childId) => excludeIds.add(childId));
+        }
+      });
+
+      // Add else branch nodes
+      ifBlock.else?.forEach((id) => {
+        excludeIds.add(id);
+        const node = graph.nodes[id];
+        if (node?.children) {
+          node.children.forEach((childId) => excludeIds.add(childId));
+        }
+      });
+
+      return excludeIds;
+    };
+
+    // Collect fields from a specific container and its children
+    const collectFieldsFromContainer = (
+      containerId: string,
+      excludeIds: Set<string>
+    ) => {
+      const container = graph.nodes[containerId];
+      if (!container?.children) return;
+
+      // Process children in order
+      for (const childId of container.children) {
+        // Skip excluded nodes (like the current if block and its contents)
+        if (excludeIds.has(childId)) continue;
+
+        const child = graph.nodes[childId];
+        if (!child) continue;
+
+        // Add simple fields
+        if (!["if_block", "object", "array"].includes(child.type)) {
+          addField({
+            id: child.id,
+            key: child.key,
+            title: child.title,
           });
         }
 
-        // Add parent's fields (if parent is an object)
-        if (parent.type === "object") {
-          parent.children?.forEach((childId) => {
-            if (childId !== currentNodeId) {
-              const child = graph.nodes[childId];
-              if (
-                child &&
-                !["if_block", "object", "array"].includes(child.type)
-              ) {
-                addField({
-                  id: child.id,
-                  key: child.key,
-                  title: child.title,
-                });
-              }
-            }
-          });
+        // For containers, collect their fields too
+        if (child.type === "object" || child.type === "array") {
+          collectFieldsFromContainer(childId, excludeIds);
         }
-
-        // Continue traversing up
-        traverse(currentNode.parentId);
       }
     };
 
-    // Start traversal from the current node
-    traverse(nodeId);
+    // Start collection process
+    const nodePath = getNodePath(nodeId);
+    const excludeIds = buildExcludeSet(nodeId);
+
+    // For each container in the path from root to current node
+    const currentId = "root";
+    collectFieldsFromContainer(currentId, excludeIds);
+
+    for (const pathNodeId of nodePath) {
+      const pathNode = graph.nodes[pathNodeId];
+      if (!pathNode?.parentId) continue;
+
+      // Collect fields from the parent container
+      collectFieldsFromContainer(pathNode.parentId, excludeIds);
+    }
 
     return fields;
   };
