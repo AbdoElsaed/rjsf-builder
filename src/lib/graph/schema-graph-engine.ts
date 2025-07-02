@@ -132,6 +132,9 @@ export class SchemaGraphEngine {
         // Objects can accept any field type
         if (parentType === 'object') return true;
 
+        // If blocks can accept any field type in their then/else branches
+        if (parentType === 'if_block') return true;
+
         // Arrays can accept any field type, but all items must be of the same type
         if (parentType === 'array') {
             const parentNode = parentNodeId ? graph.nodes[parentNodeId] : null;
@@ -282,15 +285,15 @@ export class SchemaGraphEngine {
      * Converts the graph to a JSON Schema
      */
     compileToJsonSchema(graph: SchemaGraph): RJSFSchema {
-        const ifBlocks: RJSFSchema[] = [];
         const skipNodes = new Set<string>();
 
         const compileNode = (nodeId: string): RJSFSchema => {
             const node = graph.nodes[nodeId];
 
-            // Handle IF blocks by collecting them for later
+            // Handle IF blocks
             if (node.type === 'if_block') {
                 const thenSchema: RJSFSchema = {
+                    type: 'object' as const,
                     properties: {},
                 };
 
@@ -341,36 +344,52 @@ export class SchemaGraphEngine {
                 const conditionField = node.condition?.field || '';
                 const operator = node.condition?.operator || 'equals';
 
-                // Helper to create a comparison condition with proper type handling
                 const createComparison = (op: string, value: unknown): RJSFSchema => {
-                    // Get the type of the referenced field
-                    const referencedField = Object.values(graph.nodes).find(n => n.key === conditionField);
-                    const fieldType = referencedField?.type || 'string';
-
-                    // Convert value to proper type
-                    const typedValue = fieldType === 'number' ? Number(value) :
-                        fieldType === 'boolean' ? Boolean(value) :
-                            String(value);
+                    // Convert value to string for pattern-based operations
+                    const stringValue = String(value);
+                    // Convert value to number for numeric operations
+                    const numValue = Number(value);
 
                     switch (op) {
                         case 'equals':
-                            return { const: typedValue };
+                            return { const: stringValue };
                         case 'not_equals':
-                            return { not: { const: typedValue } };
+                            return { not: { const: stringValue } };
                         case 'greater_than':
-                            return { type: 'number' as const, exclusiveMinimum: Number(typedValue) };
+                            return {
+                                type: 'number' as const,
+                                exclusiveMinimum: numValue
+                            };
                         case 'less_than':
-                            return { type: 'number' as const, exclusiveMaximum: Number(typedValue) };
+                            return {
+                                type: 'number' as const,
+                                exclusiveMaximum: numValue
+                            };
                         case 'greater_equal':
-                            return { type: 'number' as const, minimum: Number(typedValue) };
+                            return {
+                                type: 'number' as const,
+                                minimum: numValue
+                            };
                         case 'less_equal':
-                            return { type: 'number' as const, maximum: Number(typedValue) };
+                            return {
+                                type: 'number' as const,
+                                maximum: numValue
+                            };
                         case 'contains':
-                            return { type: 'string' as const, pattern: String(value) };
+                            return {
+                                type: 'string' as const,
+                                pattern: `.*${stringValue}.*`
+                            };
                         case 'starts_with':
-                            return { type: 'string' as const, pattern: `^${String(value)}` };
+                            return {
+                                type: 'string' as const,
+                                pattern: `^${stringValue}.*`
+                            };
                         case 'ends_with':
-                            return { type: 'string' as const, pattern: `${String(value)}$` };
+                            return {
+                                type: 'string' as const,
+                                pattern: `.*${stringValue}$`
+                            };
                         case 'empty':
                             return {
                                 oneOf: [
@@ -386,7 +405,7 @@ export class SchemaGraphEngine {
                                 ]
                             };
                         default:
-                            return { const: typedValue };
+                            return { const: stringValue };
                     }
                 };
 
@@ -398,16 +417,12 @@ export class SchemaGraphEngine {
                     required: [conditionField]
                 };
 
-                const conditionalSchema: RJSFSchema = {
+                // Return the conditional schema directly
+                return {
                     if: ifCondition,
                     then: thenSchema,
                     ...(elseSchema ? { else: elseSchema } : {})
                 };
-
-                // Add to the list of if blocks
-                ifBlocks.push(conditionalSchema);
-                skipNodes.add(nodeId); // Skip the if block node itself
-                return {}; // Return empty schema since we'll handle this in allOf
             }
 
             // Regular node handling
@@ -420,48 +435,33 @@ export class SchemaGraphEngine {
                 schema.description = node.description;
             }
 
-            // Add validation rules based on field type
-            switch (node.type) {
-                case 'string':
-                    if (node.minLength !== undefined) schema.minLength = node.minLength;
-                    if (node.maxLength !== undefined) schema.maxLength = node.maxLength;
-                    if (node.pattern !== undefined) schema.pattern = node.pattern;
-                    if (node.format !== undefined) schema.format = node.format;
-                    break;
-                case 'number':
-                    if (node.minimum !== undefined) schema.minimum = node.minimum;
-                    if (node.maximum !== undefined) schema.maximum = node.maximum;
-                    if (node.multipleOf !== undefined) schema.multipleOf = node.multipleOf;
-                    if (node.exclusiveMinimum !== undefined) schema.exclusiveMinimum = node.exclusiveMinimum;
-                    if (node.exclusiveMaximum !== undefined) schema.exclusiveMaximum = node.exclusiveMaximum;
-                    break;
-                case 'array':
-                    if (node.minItems !== undefined) schema.minItems = node.minItems;
-                    if (node.maxItems !== undefined) schema.maxItems = node.maxItems;
-                    if (node.uniqueItems !== undefined) schema.uniqueItems = node.uniqueItems;
-                    if (node.additionalItems !== undefined) schema.additionalItems = node.additionalItems;
-                    break;
-                case 'object':
-                    if (node.minProperties !== undefined) schema.minProperties = node.minProperties;
-                    if (node.maxProperties !== undefined) schema.maxProperties = node.maxProperties;
-                    if (node.additionalProperties !== undefined) schema.additionalProperties = node.additionalProperties;
-                    break;
-            }
-
             if (node.type === 'object' && node.children?.length) {
                 schema.properties = {};
                 schema.required = [];
+                const nestedIfBlocks: RJSFSchema[] = [];
+
                 node.children.forEach((childId) => {
                     const childNode = graph.nodes[childId];
-                    if (schema.properties) {
-                        schema.properties[childNode.key] = compileNode(childId);
-                        if (childNode.required) {
-                            schema.required?.push(childNode.key);
+                    if (!skipNodes.has(childId)) {
+                        const childSchema = compileNode(childId);
+                        if (childNode.type === 'if_block') {
+                            nestedIfBlocks.push(childSchema);
+                        } else if (schema.properties) {
+                            schema.properties[childNode.key] = childSchema;
+                            if (childNode.required) {
+                                schema.required?.push(childNode.key);
+                            }
                         }
                     }
                 });
+
                 if (schema.required.length === 0) {
                     delete schema.required;
+                }
+
+                // Add nested if blocks using allOf
+                if (nestedIfBlocks.length > 0) {
+                    schema.allOf = nestedIfBlocks;
                 }
             }
 
@@ -496,32 +496,8 @@ export class SchemaGraphEngine {
             }
         }
 
-        // Compile the main schema
-        const mainSchema = compileNode('root');
-
-        // Filter out skipped nodes from main properties
-        if (mainSchema.properties) {
-            const filteredProperties: Record<string, RJSFSchema> = {};
-            Object.entries(mainSchema.properties).forEach(([key, value]) => {
-                // Find the node ID by key
-                const matchingNode = Object.entries(graph.nodes).find(entry => entry[1].key === key);
-                const nodeId = matchingNode?.[0];
-                if (!nodeId || !skipNodes.has(nodeId)) {
-                    filteredProperties[key] = value as RJSFSchema;
-                }
-            });
-            mainSchema.properties = filteredProperties;
-        }
-
-        // If we have if blocks, add them using allOf
-        if (ifBlocks.length > 0) {
-            return {
-                ...mainSchema,
-                allOf: ifBlocks
-            };
-        }
-
-        return mainSchema;
+        // Compile the main schema starting from root
+        return compileNode('root');
     }
 
     /**

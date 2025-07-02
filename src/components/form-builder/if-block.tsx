@@ -71,39 +71,78 @@ export function IfBlock({
   // Get all available fields for comparison
   const getAvailableFields = () => {
     const fields: { id: string; key: string; title: string }[] = [];
-    const visited = new Set<string>();
+    const visitedKeys = new Set<string>();
+
+    const addField = (field: { id: string; key: string; title: string }) => {
+      if (!visitedKeys.has(field.key)) {
+        visitedKeys.add(field.key);
+        fields.push(field);
+      }
+    };
 
     const traverse = (currentNodeId: string) => {
-      if (visited.has(currentNodeId)) return;
-      visited.add(currentNodeId);
-
       const currentNode = graph.nodes[currentNodeId];
+      if (!currentNode) return;
 
       // Add the current node if it's a valid field type (not an if_block, object, or array)
+      // and it's not inside the current if block's then/else branches
       if (
-        currentNode &&
-        !["if_block", "object", "array"].includes(currentNode.type)
+        !["if_block", "object", "array"].includes(currentNode.type) &&
+        !node.then?.includes(currentNodeId) &&
+        !node.else?.includes(currentNodeId)
       ) {
-        fields.push({
+        addField({
           id: currentNode.id,
           key: currentNode.key,
           title: currentNode.title,
         });
       }
 
-      // Traverse up to parent
-      if (currentNode.parentId) {
-        traverse(currentNode.parentId);
-      }
-
-      // Traverse siblings (nodes with same parent)
+      // Only traverse up to parent and siblings at the same level
       if (currentNode.parentId) {
         const parent = graph.nodes[currentNode.parentId];
-        parent.children?.forEach((childId) => {
-          if (childId !== currentNodeId) {
-            traverse(childId);
-          }
-        });
+
+        // Add parent's siblings (fields at the same level as parent)
+        if (parent.parentId) {
+          const grandParent = graph.nodes[parent.parentId];
+          grandParent.children?.forEach((siblingId) => {
+            if (siblingId !== parent.id) {
+              const sibling = graph.nodes[siblingId];
+              if (
+                sibling &&
+                !["if_block", "object", "array"].includes(sibling.type)
+              ) {
+                addField({
+                  id: sibling.id,
+                  key: sibling.key,
+                  title: sibling.title,
+                });
+              }
+            }
+          });
+        }
+
+        // Add parent's fields (if parent is an object)
+        if (parent.type === "object") {
+          parent.children?.forEach((childId) => {
+            if (childId !== currentNodeId) {
+              const child = graph.nodes[childId];
+              if (
+                child &&
+                !["if_block", "object", "array"].includes(child.type)
+              ) {
+                addField({
+                  id: child.id,
+                  key: child.key,
+                  title: child.title,
+                });
+              }
+            }
+          });
+        }
+
+        // Continue traversing up
+        traverse(currentNode.parentId);
       }
     };
 
@@ -201,7 +240,7 @@ export function IfBlock({
   );
 
   return (
-    <div className="space-y-2 p-2 bg-muted/30 rounded-md">
+    <div className="space-y-2 p-2 bg-muted/30 rounded-md group">
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <div className="grid grid-cols-3 gap-2 flex-1">
@@ -255,18 +294,20 @@ export function IfBlock({
             />
           </div>
           {onRemove && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 ml-2 text-destructive hover:text-destructive"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemove();
-              }}
-            >
-              <X className="h-3.5 w-3.5" />
-              <span className="sr-only">Delete</span>
-            </Button>
+            <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 flex-shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-destructive hover:text-destructive"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove();
+                }}
+              >
+                <X className="h-3.5 w-3.5" />
+                <span className="sr-only">Delete</span>
+              </Button>
+            </div>
           )}
         </div>
       </div>
