@@ -8,9 +8,9 @@ import {
   List,
   Layers,
   GripVertical,
-  Pencil,
   X,
   GitBranch,
+  Settings2,
 } from "lucide-react";
 import { useState } from "react";
 import { useSchemaGraphStore } from "@/lib/store/schema-graph";
@@ -116,22 +116,46 @@ export function FormNode({
     globalIsDragging &&
       (node.type === "object" || node.type === "array") &&
       canDrop &&
-      "border-primary/50 bg-primary/5",
+      "border-primary/50",
     globalIsDragging &&
       (node.type === "object" || node.type === "array") &&
       !canDrop &&
       "border-destructive/30 opacity-60",
     // Active drop zone highlighting
-    activeDropZone === nodeId &&
-      canDrop &&
-      "ring-2 ring-primary/40 bg-primary/10",
+    activeDropZone === nodeId && canDrop && "ring-2 ring-primary bg-primary/10",
     activeDropZone === nodeId &&
       !canDrop &&
-      "ring-2 ring-destructive/40 bg-destructive/5",
+      "ring-2 ring-destructive bg-destructive/10",
     // Legacy hover state for non-dragging scenarios
     !globalIsDragging && isOver && "ring-2 ring-primary",
     node.type === "object" && "border-primary/20",
     isEditing && "ring-1 ring-primary/20 bg-muted/50"
+  );
+
+  // Add nested drop zone styles
+  const nestedDropZoneClasses = cn(
+    "mt-0.5 space-y-0.5 transition-all duration-200",
+    // Container styles
+    "border-l-2 ml-4 pl-4",
+    // Enhanced visual feedback for child drop zones
+    globalIsDragging && canDrop && "border-primary/40",
+    globalIsDragging && !canDrop && "border-destructive/30",
+    // Empty state styles
+    !node.children?.length &&
+      cn(
+        "min-h-[32px]",
+        activeDropZone === nodeId &&
+          canDrop &&
+          "border border-dashed border-primary/50 rounded-lg bg-primary/5",
+        activeDropZone === nodeId &&
+          !canDrop &&
+          "border border-dashed border-destructive/50 rounded-lg bg-destructive/5",
+        !globalIsDragging &&
+          isOver &&
+          "border border-dashed border-primary/50 rounded-lg"
+      ),
+    // Add bottom padding only when there are children
+    node.children?.length ? "pb-0.5" : ""
   );
 
   // Special rendering for IF blocks
@@ -201,30 +225,26 @@ export function FormNode({
             />
           </div>
         ) : (
-          <>
-            <div className="flex-1 min-w-0 flex items-center gap-2">
+          <div className="flex flex-1 items-center gap-2 min-w-0">
+            {Icon && (
               <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-              <span className="text-sm font-medium truncate">{node.title}</span>
-              <span className="text-xs text-muted-foreground truncate">
-                ({node.key})
-              </span>
-              {node.description && (
-                <span className="text-xs text-muted-foreground truncate">
-                  ({node.description})
+            )}
+            <div className="flex-1 truncate">
+              <span className="text-sm font-medium">{node.title}</span>
+              {node.key && (
+                <span className="ml-1 text-xs text-muted-foreground">
+                  ({node.key})
                 </span>
               )}
-              {node.required && (
-                <span className="text-xs text-primary flex-shrink-0">*</span>
-              )}
             </div>
-            <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 flex-shrink-0">
+            <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-6 w-6"
                 onClick={handleEdit}
               >
-                <Pencil className="h-3.5 w-3.5" />
+                <Settings2 className="h-3.5 w-3.5" />
                 <span className="sr-only">Edit</span>
               </Button>
               <Button
@@ -237,35 +257,12 @@ export function FormNode({
                 <span className="sr-only">Delete</span>
               </Button>
             </div>
-          </>
+          </div>
         )}
       </div>
 
-      {/* Children container for object and array types */}
       {(node.type === "object" || node.type === "array") && (
-        <div
-          className={cn(
-            "mt-0.5 space-y-0.5 border-l-2 ml-4 pl-4 transition-all duration-200",
-            // Enhanced visual feedback for child drop zones
-            globalIsDragging && canDrop && "border-primary/40",
-            globalIsDragging && !canDrop && "border-destructive/30",
-            activeDropZone === nodeId &&
-              canDrop &&
-              !node.children?.length &&
-              "min-h-[32px] border border-dashed border-primary/50 rounded-lg bg-primary/5",
-            activeDropZone === nodeId &&
-              !canDrop &&
-              !node.children?.length &&
-              "min-h-[32px] border border-dashed border-destructive/50 rounded-lg bg-destructive/5",
-            // Legacy hover state
-            !globalIsDragging &&
-              isOver &&
-              !node.children?.length &&
-              "min-h-[40px] border border-dashed border-primary/50 rounded-lg",
-            // Add bottom padding only when there are children
-            node.children?.length ? "pb-0.5" : ""
-          )}
-        >
+        <div className={nestedDropZoneClasses}>
           {node.children && node.children.length > 0 ? (
             <SortableContext
               items={node.children}

@@ -190,54 +190,118 @@ export function IfBlock({
     title: string,
     branch: "then" | "else",
     items: string[] = []
-  ) => (
-    <div className="space-y-1">
-      <Label className="text-xs font-medium">{title}</Label>
-      <div
-        ref={ref}
-        className={cn(
-          "min-h-[40px] rounded-md border border-dashed p-2",
-          !isConditionValid && "opacity-50 cursor-not-allowed border-muted",
-          isConditionValid &&
-            isOver &&
-            !isDragging &&
-            "border-primary bg-primary/5",
-          isConditionValid && isDragging && "border-primary/50 bg-primary/5",
-          items.length === 0 && "flex items-center justify-center"
-        )}
-      >
-        {items.length > 0 ? (
-          <SortableContext items={items} strategy={verticalListSortingStrategy}>
-            <div className="space-y-1">
-              {items.map((itemId) => (
-                <FormNode
-                  key={itemId}
-                  nodeId={itemId}
-                  selectedNodeId={null}
-                  onSelect={() => {}}
-                  isDragging={isDragging}
-                  draggedItem={draggedItem}
-                  activeDropZone={activeDropZone}
-                  onRemove={() => handleRemoveField(itemId, branch)}
-                />
-              ))}
-            </div>
-          </SortableContext>
-        ) : (
-          <span
-            className={cn(
-              "text-xs",
-              isConditionValid
-                ? "text-muted-foreground"
-                : "text-muted-foreground/50"
-            )}
-          >
-            {isConditionValid ? "Drop fields here" : "Set condition first"}
-          </span>
-        )}
+  ) => {
+    const dropZoneId = `${nodeId}_${branch}`;
+    const isActiveDropZone = activeDropZone === dropZoneId;
+    const canDrop =
+      draggedItem &&
+      (() => {
+        const { engine, graph } = useSchemaGraphStore.getState();
+        return engine.canDropIntoParent(
+          graph,
+          draggedItem.type,
+          "if_block",
+          nodeId
+        );
+      })();
+
+    return (
+      <div className="space-y-1">
+        <Label className="text-xs font-medium">{title}</Label>
+        <div
+          ref={ref}
+          className={cn(
+            "min-h-[40px] rounded-md border transition-all duration-200",
+            // Base styles
+            items.length === 0 && "border-dashed",
+            !isConditionValid &&
+              "opacity-50 cursor-not-allowed border-muted bg-muted/10",
+            // Active drop zone styles - highest priority
+            isActiveDropZone &&
+              canDrop &&
+              "ring-2 ring-primary border-primary bg-primary/10",
+            isActiveDropZone &&
+              !canDrop &&
+              "ring-2 ring-destructive border-destructive bg-destructive/10",
+            // Dragging styles - medium priority
+            isConditionValid &&
+              isDragging &&
+              !isActiveDropZone &&
+              canDrop &&
+              "border-primary/50 bg-primary/5",
+            isConditionValid &&
+              isDragging &&
+              !isActiveDropZone &&
+              !canDrop &&
+              "border-destructive/30 bg-destructive/5",
+            // Hover styles - lowest priority
+            isConditionValid &&
+              isOver &&
+              !isDragging &&
+              "border-primary bg-primary/5",
+            // Padding
+            "p-2",
+            // Empty state
+            items.length === 0 && "flex items-center justify-center"
+          )}
+        >
+          {items.length > 0 ? (
+            <SortableContext
+              items={items}
+              strategy={verticalListSortingStrategy}
+            >
+              <div
+                className={cn(
+                  "space-y-1",
+                  isDragging && "relative",
+                  isActiveDropZone &&
+                    canDrop &&
+                    "after:absolute after:inset-0 after:pointer-events-none after:ring-2 after:ring-primary/30 after:rounded-md"
+                )}
+              >
+                {items.map((itemId) => (
+                  <FormNode
+                    key={itemId}
+                    nodeId={itemId}
+                    selectedNodeId={null}
+                    onSelect={() => {}}
+                    isDragging={isDragging}
+                    draggedItem={draggedItem}
+                    activeDropZone={activeDropZone}
+                    onRemove={() => handleRemoveField(itemId, branch)}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          ) : (
+            <span
+              className={cn(
+                "text-xs",
+                isConditionValid && !isDragging && "text-muted-foreground",
+                isConditionValid &&
+                  isDragging &&
+                  canDrop &&
+                  "text-primary font-medium",
+                isConditionValid &&
+                  isDragging &&
+                  !canDrop &&
+                  "text-destructive",
+                !isConditionValid && "text-muted-foreground/50"
+              )}
+            >
+              {!isConditionValid
+                ? "Set condition first"
+                : isDragging
+                ? canDrop
+                  ? "Drop field here"
+                  : "Cannot drop this field type here"
+                : "Drop fields here"}
+            </span>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="space-y-2 p-2 bg-muted/30 rounded-md group">
