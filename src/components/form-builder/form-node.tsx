@@ -95,8 +95,7 @@ export function FormNode({
       );
     })();
 
-  const handleDelete = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDelete = () => {
     if (onRemove) {
       onRemove();
     } else {
@@ -168,6 +167,7 @@ export function FormNode({
               isDragging={globalIsDragging}
               draggedItem={draggedItem || undefined}
               activeDropZone={activeDropZone}
+              onRemove={handleDelete}
             />
           )}
         </div>

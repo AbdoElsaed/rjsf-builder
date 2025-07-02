@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { X } from "lucide-react";
 import type { DraggedItem } from "./types";
 
 interface IfBlockProps {
@@ -22,6 +24,7 @@ interface IfBlockProps {
   isDragging?: boolean;
   draggedItem?: DraggedItem;
   activeDropZone?: string | null;
+  onRemove?: () => void;
 }
 
 export function IfBlock({
@@ -29,6 +32,7 @@ export function IfBlock({
   isDragging = false,
   draggedItem,
   activeDropZone,
+  onRemove,
 }: IfBlockProps) {
   const { graph, updateNode, removeNode } = useSchemaGraphStore();
   const node = graph.nodes[nodeId];
@@ -199,53 +203,71 @@ export function IfBlock({
   return (
     <div className="space-y-2 p-2 bg-muted/30 rounded-md">
       <div className="space-y-2">
-        <div className="grid grid-cols-3 gap-2">
-          <Select
-            value={node.condition?.field || ""}
-            onValueChange={(value) => handleConditionChange("field", value)}
-          >
-            <SelectTrigger className="h-7 text-xs">
-              <SelectValue placeholder="Select field" />
-            </SelectTrigger>
-            <SelectContent>
-              {availableFields.map((field) => (
-                <SelectItem key={field.id} value={field.key}>
-                  {field.title}
+        <div className="flex items-center justify-between">
+          <div className="grid grid-cols-3 gap-2 flex-1">
+            <Select
+              value={node.condition?.field || ""}
+              onValueChange={(value) => handleConditionChange("field", value)}
+            >
+              <SelectTrigger className="h-7 text-xs">
+                <SelectValue placeholder="Select field" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableFields.map((field) => (
+                  <SelectItem key={field.id} value={field.key}>
+                    {field.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={node.condition?.operator || "equals"}
+              onValueChange={(value) =>
+                handleConditionChange("operator", value)
+              }
+            >
+              <SelectTrigger className="h-7 text-xs">
+                <SelectValue placeholder="Operator" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="equals">Equals</SelectItem>
+                <SelectItem value="not_equals">Not Equals</SelectItem>
+                <SelectItem value="greater_than">Greater Than</SelectItem>
+                <SelectItem value="less_than">Less Than</SelectItem>
+                <SelectItem value="greater_equal">
+                  Greater Than or Equal
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+                <SelectItem value="less_equal">Less Than or Equal</SelectItem>
+                <SelectItem value="contains">Contains</SelectItem>
+                <SelectItem value="starts_with">Starts With</SelectItem>
+                <SelectItem value="ends_with">Ends With</SelectItem>
+                <SelectItem value="empty">Is Empty</SelectItem>
+                <SelectItem value="not_empty">Is Not Empty</SelectItem>
+              </SelectContent>
+            </Select>
 
-          <Select
-            value={node.condition?.operator || "equals"}
-            onValueChange={(value) => handleConditionChange("operator", value)}
-          >
-            <SelectTrigger className="h-7 text-xs">
-              <SelectValue placeholder="Operator" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="equals">Equals</SelectItem>
-              <SelectItem value="not_equals">Not Equals</SelectItem>
-              <SelectItem value="greater_than">Greater Than</SelectItem>
-              <SelectItem value="less_than">Less Than</SelectItem>
-              <SelectItem value="greater_equal">
-                Greater Than or Equal
-              </SelectItem>
-              <SelectItem value="less_equal">Less Than or Equal</SelectItem>
-              <SelectItem value="contains">Contains</SelectItem>
-              <SelectItem value="starts_with">Starts With</SelectItem>
-              <SelectItem value="ends_with">Ends With</SelectItem>
-              <SelectItem value="empty">Is Empty</SelectItem>
-              <SelectItem value="not_empty">Is Not Empty</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Input
-            className="h-7 text-xs"
-            placeholder="Value"
-            value={String(node.condition?.value || "")}
-            onChange={(e) => handleConditionChange("value", e.target.value)}
-          />
+            <Input
+              className="h-7 text-xs"
+              placeholder="Value"
+              value={String(node.condition?.value || "")}
+              onChange={(e) => handleConditionChange("value", e.target.value)}
+            />
+          </div>
+          {onRemove && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 ml-2 text-destructive hover:text-destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove();
+              }}
+            >
+              <X className="h-3.5 w-3.5" />
+              <span className="sr-only">Delete</span>
+            </Button>
+          )}
         </div>
       </div>
 
