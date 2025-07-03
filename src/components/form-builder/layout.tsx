@@ -159,7 +159,7 @@ export function FormBuilderLayout() {
     // If the item is dropped over itself, we don't need to do anything
     if (activeId === overId) return;
 
-    const activeData = active.data.current;
+    const activeData = active.data.current as DraggedItem;
     const overData = over.data.current;
 
     // Handle dropping into then/else zones of IF blocks
@@ -171,62 +171,11 @@ export function FormBuilderLayout() {
       const parentNode = graph.nodes[parentId];
 
       if (parentNode.type === "if_block") {
-        // Check if the node already exists in either branch
-        const existsInThen = parentNode.then?.includes(activeId as string);
-        const existsInElse = parentNode.else?.includes(activeId as string);
-
-        // If node exists in the other branch, remove it first
-        if (zone === "then" && existsInElse) {
-          updateNode(parentId, {
-            ...parentNode,
-            else: parentNode.else?.filter((id) => id !== activeId),
-          });
-        } else if (zone === "else" && existsInThen) {
-          updateNode(parentId, {
-            ...parentNode,
-            then: parentNode.then?.filter((id) => id !== activeId),
-          });
-        }
-
-        if (activeData?.type && !graph.nodes[activeId as string]) {
-          // Create new node
-          const title = `New ${activeData.label}`;
-          const nodeData = {
-            type: activeData.type as JSONSchemaType,
-            title,
-            key: "",
-          };
-
-          // Add to root first
-          addNode(nodeData, "root");
-
-          // Get the latest graph state
-          const currentGraph = useSchemaGraphStore.getState().graph;
-          const rootNode = currentGraph.nodes.root;
-          const newNodeId = rootNode.children?.[rootNode.children.length - 1];
-
-          if (newNodeId) {
-            // Update the IF block's then/else array
-            const updates = {
-              ...parentNode,
-              [zone]: [
-                ...(parentNode[zone as "then" | "else"] || []),
-                newNodeId,
-              ],
-            };
-            updateNode(parentId, updates);
-
-            // Remove from root since it's now in the IF block
-            updateNode("root", {
-              ...rootNode,
-              children: rootNode.children?.filter((id) => id !== newNodeId),
-            });
-          }
-        } else if (typeof activeId === "string") {
-          // Move existing node
+        // If it's an existing node being moved
+        if (typeof activeId === "string" && graph.nodes[activeId]) {
           const activeNode = graph.nodes[activeId];
 
-          // Remove from old parent if needed
+          // Remove from old parent first
           if (activeNode.parentId) {
             const oldParent = graph.nodes[activeNode.parentId];
             if (oldParent.type === "if_block") {
@@ -251,6 +200,35 @@ export function FormBuilderLayout() {
             [zone]: [...(parentNode[zone as "then" | "else"] || []), activeId],
           };
           updateNode(parentId, updates);
+        } else if (activeData?.type) {
+          // Create new node
+          const title = `New ${activeData.label}`;
+          const nodeData = {
+            type: activeData.type as JSONSchemaType,
+            title,
+            key: "",
+          };
+
+          // Add node directly to the if block's branch
+          const newNodeId = addNode(nodeData, "root");
+          if (newNodeId) {
+            const updates = {
+              ...parentNode,
+              [zone]: [
+                ...(parentNode[zone as "then" | "else"] || []),
+                newNodeId,
+              ],
+            };
+            updateNode(parentId, updates);
+
+            // Remove from root since it's now in the IF block
+            updateNode("root", {
+              ...graph.nodes.root,
+              children: graph.nodes.root.children?.filter(
+                (id) => id !== newNodeId
+              ),
+            });
+          }
         }
         return;
       }
@@ -275,7 +253,6 @@ export function FormBuilderLayout() {
 
       // Create a new node
       const title = `New ${activeData.label}`;
-
       addNode(
         {
           type: activeData.type as JSONSchemaType,
@@ -299,6 +276,26 @@ export function FormBuilderLayout() {
         (overNode.type === "object" || overNode.type === "array") &&
         canDropIntoParent(activeNode.type, overNode.type, overId)
       ) {
+        // Remove from old parent first
+        if (activeNode.parentId) {
+          const oldParent = graph.nodes[activeNode.parentId];
+          if (oldParent.type === "if_block") {
+            // Remove from then/else arrays if present
+            updateNode(activeNode.parentId, {
+              ...oldParent,
+              then: oldParent.then?.filter((id) => id !== activeId),
+              else: oldParent.else?.filter((id) => id !== activeId),
+            });
+          } else {
+            // Remove from children array
+            updateNode(activeNode.parentId, {
+              ...oldParent,
+              children: oldParent.children?.filter((id) => id !== activeId),
+            });
+          }
+        }
+
+        // Then move to new parent
         moveNode(activeId, overId);
       }
       // If they have the same parent, it's a reorder operation
@@ -323,6 +320,26 @@ export function FormBuilderLayout() {
             targetParentId
           )
         ) {
+          // Remove from old parent first
+          if (activeNode.parentId) {
+            const oldParent = graph.nodes[activeNode.parentId];
+            if (oldParent.type === "if_block") {
+              // Remove from then/else arrays if present
+              updateNode(activeNode.parentId, {
+                ...oldParent,
+                then: oldParent.then?.filter((id) => id !== activeId),
+                else: oldParent.else?.filter((id) => id !== activeId),
+              });
+            } else {
+              // Remove from children array
+              updateNode(activeNode.parentId, {
+                ...oldParent,
+                children: oldParent.children?.filter((id) => id !== activeId),
+              });
+            }
+          }
+
+          // Then move to new parent
           moveNode(activeId, targetParentId);
         }
       }
