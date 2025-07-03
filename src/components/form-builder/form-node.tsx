@@ -12,6 +12,7 @@ import {
   GitBranch,
   Settings2,
   ArrowRight,
+  ChevronDown,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import {
@@ -26,6 +27,11 @@ import { FieldConfigPanel } from "./field-config-panel";
 import { Button } from "@/components/ui/button";
 import type { FormNodeProps } from "./types";
 import { IfBlock } from "./if-block";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 const FIELD_ICONS = {
   string: TextQuote,
@@ -60,6 +66,7 @@ export function FormNode({
   const { graph, removeNode } = useSchemaGraphStore();
   const [isEditing, setIsEditing] = useState(false);
   const [nestingDepth, setNestingDepth] = useState(0);
+  const [isOpen, setIsOpen] = useState(true);
   const node = graph.nodes[nodeId];
 
   // Calculate and update nesting depth
@@ -241,16 +248,16 @@ export function FormNode({
   return (
     <div ref={setRefs} style={style} className={baseClasses}>
       {renderDepthIndicators()}
-      <div className="flex items-center gap-2 p-1.5 min-w-0">
-        <button
-          {...attributes}
-          {...listeners}
-          className="touch-none flex-shrink-0"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab active:cursor-grabbing" />
-        </button>
-        {isEditing ? (
+      {isEditing ? (
+        <div className="flex items-center gap-2 p-1.5 min-w-0">
+          <button
+            {...attributes}
+            {...listeners}
+            className="touch-none flex-shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab active:cursor-grabbing" />
+          </button>
           <div className="flex-1">
             <FieldConfigPanel
               nodeId={nodeId}
@@ -264,87 +271,118 @@ export function FormNode({
               }}
             />
           </div>
-        ) : (
-          <div className="flex flex-1 items-center gap-2 min-w-0">
-            {Icon && (
-              <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-            )}
-            <div className="flex-1 truncate">
-              <span className="text-sm font-medium">{node.title}</span>
-              {node.key && (
-                <span className="ml-1 text-xs text-muted-foreground">
-                  ({node.key})
-                </span>
+        </div>
+      ) : (
+        <Collapsible open={isOpen} onOpenChange={setIsOpen} className="w-full">
+          <div className="flex items-center gap-2 p-1.5 min-w-0">
+            <button
+              {...attributes}
+              {...listeners}
+              className="touch-none flex-shrink-0"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab active:cursor-grabbing" />
+            </button>
+            <div className="flex flex-1 items-center gap-2 min-w-0">
+              {(node.type === "object" || node.type === "array") && (
+                <CollapsibleTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 hover:bg-muted"
+                  >
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 text-muted-foreground transition-transform duration-200",
+                        isOpen && "transform rotate-180"
+                      )}
+                    />
+                    <span className="sr-only">Toggle section</span>
+                  </Button>
+                </CollapsibleTrigger>
               )}
-            </div>
-            {/* Show nesting path on hover when dragging */}
-            {globalIsDragging && nestingDepth > 0 && (
-              <div className="hidden group-hover:flex items-center gap-1 text-xs text-muted-foreground">
-                <ArrowRight className="h-3 w-3" />
-                <span>Depth: {nestingDepth}</span>
+              {Icon && (
+                <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              )}
+              <div className="flex-1 truncate">
+                <span className="text-sm font-medium">{node.title}</span>
+                {node.key && (
+                  <span className="ml-1 text-xs text-muted-foreground">
+                    ({node.key})
+                  </span>
+                )}
               </div>
-            )}
-            <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={handleEdit}
-              >
-                <Settings2 className="h-3.5 w-3.5" />
-                <span className="sr-only">Edit</span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-destructive hover:text-destructive"
-                onClick={handleDelete}
-              >
-                <X className="h-3.5 w-3.5" />
-                <span className="sr-only">Delete</span>
-              </Button>
+              {/* Show nesting path on hover when dragging */}
+              {globalIsDragging && nestingDepth > 0 && (
+                <div className="hidden group-hover:flex items-center gap-1 text-xs text-muted-foreground">
+                  <ArrowRight className="h-3 w-3" />
+                  <span>Depth: {nestingDepth}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={handleEdit}
+                >
+                  <Settings2 className="h-3.5 w-3.5" />
+                  <span className="sr-only">Edit</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-destructive hover:text-destructive"
+                  onClick={handleDelete}
+                >
+                  <X className="h-3.5 w-3.5" />
+                  <span className="sr-only">Delete</span>
+                </Button>
+              </div>
             </div>
           </div>
-        )}
-      </div>
 
-      {(node.type === "object" || node.type === "array") && (
-        <div className={nestedDropZoneClasses}>
-          {node.children && node.children.length > 0 ? (
-            <SortableContext
-              items={node.children}
-              strategy={verticalListSortingStrategy}
-            >
-              {node.children.map((childId) => (
-                <FormNode
-                  key={childId}
-                  nodeId={childId}
-                  selectedNodeId={selectedNodeId}
-                  onSelect={onSelect}
-                  isDragging={globalIsDragging}
-                  draggedItem={draggedItem}
-                  activeDropZone={activeDropZone}
-                />
-              ))}
-            </SortableContext>
-          ) : (
-            <div className="flex items-center justify-center h-full text-xs text-muted-foreground py-1.5">
-              {globalIsDragging ? (
-                canDrop ? (
-                  <span className="text-primary font-medium">
-                    Drop fields here
-                  </span>
+          {(node.type === "object" || node.type === "array") && (
+            <CollapsibleContent>
+              <div className={nestedDropZoneClasses}>
+                {node.children && node.children.length > 0 ? (
+                  <SortableContext
+                    items={node.children}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {node.children.map((childId) => (
+                      <FormNode
+                        key={childId}
+                        nodeId={childId}
+                        selectedNodeId={selectedNodeId}
+                        onSelect={onSelect}
+                        isDragging={globalIsDragging}
+                        draggedItem={draggedItem}
+                        activeDropZone={activeDropZone}
+                      />
+                    ))}
+                  </SortableContext>
                 ) : (
-                  <span className="text-destructive">
-                    Cannot drop this field type here
-                  </span>
-                )
-              ) : (
-                "Drop fields here"
-              )}
-            </div>
+                  <div className="flex items-center justify-center h-full text-xs text-muted-foreground py-1.5">
+                    {globalIsDragging ? (
+                      canDrop ? (
+                        <span className="text-primary font-medium">
+                          Drop fields here
+                        </span>
+                      ) : (
+                        <span className="text-destructive">
+                          Cannot drop this field type here
+                        </span>
+                      )
+                    ) : (
+                      "Drop fields here"
+                    )}
+                  </div>
+                )}
+              </div>
+            </CollapsibleContent>
           )}
-        </div>
+        </Collapsible>
       )}
     </div>
   );

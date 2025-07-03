@@ -16,8 +16,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { X } from "lucide-react";
+import { X, ChevronDown } from "lucide-react";
 import type { DraggedItem } from "./types";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { useState } from "react";
 
 interface IfBlockProps {
   nodeId: string;
@@ -36,6 +42,7 @@ export function IfBlock({
 }: IfBlockProps) {
   const { graph, updateNode, removeNode } = useSchemaGraphStore();
   const node = graph.nodes[nodeId];
+  const [isOpen, setIsOpen] = useState(true);
 
   const thenDroppableId = `${nodeId}_then`;
   const elseDroppableId = `${nodeId}_else`;
@@ -325,10 +332,29 @@ export function IfBlock({
   };
 
   return (
-    <div className="space-y-2 p-2 bg-muted/30 rounded-md group">
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="grid grid-cols-3 gap-2 flex-1">
+    <Collapsible
+      open={isOpen}
+      onOpenChange={setIsOpen}
+      className="space-y-2 p-2 bg-muted/30 rounded-md group"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <CollapsibleTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0 hover:bg-muted"
+          >
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 text-muted-foreground transition-transform duration-200",
+                isOpen && "transform rotate-180"
+              )}
+            />
+            <span className="sr-only">Toggle section</span>
+          </Button>
+        </CollapsibleTrigger>
+        <div className="flex-1">
+          <div className="grid grid-cols-3 gap-2">
             <Select
               value={node.condition?.field || ""}
               onValueChange={(value) => handleConditionChange("field", value)}
@@ -378,27 +404,29 @@ export function IfBlock({
               onChange={(e) => handleConditionChange("value", e.target.value)}
             />
           </div>
-          {onRemove && (
-            <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 flex-shrink-0">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-destructive hover:text-destructive"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemove();
-                }}
-              >
-                <X className="h-3.5 w-3.5" />
-                <span className="sr-only">Delete</span>
-              </Button>
-            </div>
-          )}
         </div>
+        {onRemove && (
+          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 flex-shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-destructive hover:text-destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove();
+              }}
+            >
+              <X className="h-3.5 w-3.5" />
+              <span className="sr-only">Delete</span>
+            </Button>
+          </div>
+        )}
       </div>
 
-      {renderDropZone(setThenRef, isThenOver, "Then", "then", node.then)}
-      {renderDropZone(setElseRef, isElseOver, "Else", "else", node.else)}
-    </div>
+      <CollapsibleContent className="space-y-2">
+        {renderDropZone(setThenRef, isThenOver, "Then", "then", node.then)}
+        {renderDropZone(setElseRef, isElseOver, "Else", "else", node.else)}
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
