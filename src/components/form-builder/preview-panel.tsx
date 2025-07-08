@@ -45,11 +45,18 @@ export function PreviewPanel({ showPreview }: PreviewPanelProps) {
 
   // Watch for schema changes and migrate form data
   useEffect(() => {
-    if (JSON.stringify(schema) !== JSON.stringify(previousSchema.current)) {
+    // Only migrate form data for automatic schema changes, not when manually editing
+    if (
+      !editMode &&
+      JSON.stringify(schema) !== JSON.stringify(previousSchema.current)
+    ) {
       migrateFormData(previousSchema.current, schema);
       previousSchema.current = schema;
+    } else if (!editMode) {
+      // Update the reference when not in edit mode
+      previousSchema.current = schema;
     }
-  }, [schema, migrateFormData]);
+  }, [schema, migrateFormData, editMode]);
 
   // Create MUI theme based on the app's color mode
   const muiTheme = createTheme({
@@ -88,16 +95,76 @@ export function PreviewPanel({ showPreview }: PreviewPanelProps) {
   const handleSaveSchema = () => {
     try {
       const parsedSchema = JSON.parse(editedSchema);
-      // Store the current schema before updating
-      const oldSchema = schema;
+
+      // Get current form data before schema change
+      const currentFormData = formData;
+
+      // Update the schema
       setSchemaFromJson(parsedSchema);
-      // Migrate form data with the old and new schemas
-      migrateFormData(oldSchema, parsedSchema);
+
+      // Preserve form data for fields that still exist in the new schema
+      const preservedFormData = preserveCompatibleFormData(
+        currentFormData,
+        parsedSchema
+      );
+      updateFormData(preservedFormData);
+
       setEditMode(false);
       toast.success("Schema updated successfully");
     } catch {
       toast.error("Invalid JSON schema");
     }
+  };
+
+  // Helper function to preserve form data that's compatible with the new schema
+  const preserveCompatibleFormData = (
+    currentData: Record<string, JSONValue>,
+    newSchema: RJSFSchema
+  ): Record<string, JSONValue> => {
+    if (!newSchema.properties) {
+      return {};
+    }
+
+    const preservedData: Record<string, JSONValue> = {};
+
+    // Go through each property in the new schema
+    Object.entries(newSchema.properties).forEach(([key, property]) => {
+      if (key in currentData) {
+        const currentValue = currentData[key];
+
+        if (typeof property === "object" && property !== null) {
+          // Check if the field type is compatible
+          if (
+            property.type === "object" &&
+            typeof currentValue === "object" &&
+            currentValue !== null &&
+            !Array.isArray(currentValue)
+          ) {
+            // For object fields, recursively preserve compatible nested data
+            preservedData[key] = preserveCompatibleFormData(
+              currentValue as Record<string, JSONValue>,
+              property as RJSFSchema
+            );
+          } else if (property.type === "array" && Array.isArray(currentValue)) {
+            // For array fields, preserve the array if the type matches
+            preservedData[key] = currentValue;
+          } else if (
+            (property.type === "string" && typeof currentValue === "string") ||
+            (property.type === "number" && typeof currentValue === "number") ||
+            (property.type === "integer" && typeof currentValue === "number") ||
+            (property.type === "boolean" &&
+              typeof currentValue === "boolean") ||
+            // If no type is specified, preserve the value
+            !property.type
+          ) {
+            preservedData[key] = currentValue;
+          }
+          // If types don't match, skip this field (it will be empty in the form)
+        }
+      }
+    });
+
+    return preservedData;
   };
 
   const handleSaveUiSchema = () => {
@@ -221,7 +288,10 @@ export function PreviewPanel({ showPreview }: PreviewPanelProps) {
                         <IconButton
                           size="small"
                           color="primary"
-                          onClick={() => setEditMode(true)}
+                          onClick={() => {
+                            setEditedSchema(JSON.stringify(schema, null, 2));
+                            setEditMode(true);
+                          }}
                         >
                           <Pencil className="h-4 w-4" />
                         </IconButton>
