@@ -7,7 +7,7 @@ import { Editor } from "@monaco-editor/react";
 import { ThemeProvider, createTheme, IconButton, Tooltip } from "@mui/material";
 import validator from "@rjsf/validator-ajv8";
 import { withTheme } from "@rjsf/core";
-import { Theme as RJSFMuiTheme } from "@rjsf/mui";
+import { Theme as RJSFShadcnTheme } from "@rjsf/shadcn";
 import type { RJSFSchema } from "@rjsf/utils";
 import type { IChangeEvent } from "@rjsf/core";
 import { useTheme } from "@/components/theme-provider";
@@ -17,7 +17,7 @@ import { Pencil, X, Check, Copy } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // Create the Material-UI form component
-const Form = withTheme(RJSFMuiTheme);
+const Form = withTheme(RJSFShadcnTheme);
 
 interface PreviewPanelProps {
   showPreview: boolean;
