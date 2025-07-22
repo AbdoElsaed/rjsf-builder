@@ -28,7 +28,15 @@ export function PreviewPanel({ showPreview }: PreviewPanelProps) {
   const { formData, updateFormData, migrateFormData } = useFormDataStore();
   const { uiSchema, updateUiSchema } = useUiSchemaStore();
   const { theme: colorMode } = useTheme();
-  const schema = compileToJsonSchema() as RJSFSchema;
+
+  // Handle compilation errors gracefully
+  let schema: RJSFSchema;
+  try {
+    schema = compileToJsonSchema() as RJSFSchema;
+  } catch (error) {
+    console.error('Schema compilation error:', error);
+    schema = { type: 'object', properties: {} } as RJSFSchema;
+  }
   const previousSchema = useRef<RJSFSchema>(schema);
   const [editMode, setEditMode] = useState(false);
   const [editedSchema, setEditedSchema] = useState(

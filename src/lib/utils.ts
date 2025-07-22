@@ -15,8 +15,15 @@ export function cn(...inputs: ClassValue[]) {
 export function getNodePath(graph: SchemaGraph, nodeId: string): string {
   const parts: string[] = [];
   let currentId = nodeId;
+  const visited = new Set<string>(); // Prevent infinite loops
 
   while (currentId && currentId !== 'root') {
+    // Check for circular references
+    if (visited.has(currentId)) {
+      break;
+    }
+    visited.add(currentId);
+
     const currentNode = graph.nodes[currentId];
     if (!currentNode) break;
 
