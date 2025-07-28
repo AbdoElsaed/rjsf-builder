@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import {
   DndContext,
   type DragEndEvent,
@@ -20,21 +19,12 @@ import {
 } from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Eye, Code, Settings2 } from "lucide-react";
+import { Eye, Code } from "lucide-react";
 import { FieldPalette } from "./field-palette";
 import { Canvas } from "./canvas";
 import { PreviewPanel } from "./preview-panel";
-import { FieldConfigPanel } from "./field-config-panel";
 import { useSchemaGraphStore } from "@/lib/store/schema-graph";
 import type { SchemaGraph, JSONSchemaType } from "@/lib/store/schema-graph";
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import {
-  restrictToVerticalAxis,
-  restrictToParentElement,
-} from "@dnd-kit/modifiers";
 
 interface DraggedItem {
   type: string;
@@ -49,7 +39,6 @@ export function FormBuilderLayout() {
   const [activeDropZone, setActiveDropZone] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
-  const [showConfig, setShowConfig] = useState(false);
   const { addNode, moveNode, reorderNode, graph, updateNode } =
     useSchemaGraphStore();
 
@@ -103,11 +92,6 @@ export function FormBuilderLayout() {
       return;
     }
 
-    // For regular nodes, check if we can drop here
-    const overData = over.data.current as {
-      type?: string;
-      parentId?: string;
-    } | null;
     const targetNodeId = typeof overId === "string" ? overId : undefined;
     const targetNode = targetNodeId ? graph.nodes[targetNodeId] : null;
 
@@ -160,7 +144,6 @@ export function FormBuilderLayout() {
     if (activeId === overId) return;
 
     const activeData = active.data.current as DraggedItem;
-    const overData = over.data.current;
 
     // Handle dropping into then/else zones of IF blocks
     if (
