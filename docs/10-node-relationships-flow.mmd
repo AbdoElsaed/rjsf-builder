@@ -1,0 +1,104 @@
+%%{init: {"theme": "dark", "themeVariables": {"fontFamily": "Arial, sans-serif", "fontSize": "11px", "primaryColor": "#1a1a1a", "primaryTextColor": "#ffffff", "lineColor": "#90a4ae", "background": "#0d1117"}, "flowchart": {"nodeSpacing": 40, "rankSpacing": 60, "padding": 20}}}%%
+flowchart TD
+    %% Graph Access Pattern
+    subgraph "Graph Access & Navigation"
+        GRAPH[SchemaGraph Entry<br/>nodes: Record<br/>rootId: string]
+        ACCESS[Node Access<br/>graph.nodes nodeId<br/>O-1 lookup time<br/>Direct hash access]
+        ROOT_ACCESS[Root Access<br/>graph.nodes graph.rootId<br/>Entry point navigation]
+    end
+    
+    %% Node Relationship Patterns
+    subgraph "Parent-Child Relationships"
+        PARENT[Parent Node<br/>Has children array<br/>Contains child node IDs<br/>Manages child ordering]
+        CHILD_LIST[Children Array<br/>string array of IDs<br/>Ordered collection<br/>Can be empty]
+        CHILD_NODE[Child Node<br/>Has parentId reference<br/>Back-reference to parent<br/>Maintains tree integrity]
+        ORPHAN[Orphaned Node<br/>parentId exists but<br/>parent.children missing ID<br/>Inconsistent state]
+    end
+    
+    %% Tree Traversal Patterns
+    subgraph "Tree Navigation Patterns"
+        DFS[Depth-First Search<br/>Recursive traversal<br/>Visit node then children<br/>Stack-based approach]
+        BFS[Breadth-First Search<br/>Level-by-level traversal<br/>Queue-based approach<br/>Sibling nodes first]
+        PARENT_LOOKUP[Parent Lookup<br/>child.parentId access<br/>Single hop navigation<br/>Upward traversal]
+        CHILD_ITERATION[Child Iteration<br/>parent.children.forEach<br/>Iterate child IDs<br/>Downward traversal]
+    end
+    
+    %% Node Type Relationships
+    subgraph "Type-Based Relationships"
+        CONTAINER[Container Types<br/>object, array<br/>Can have children<br/>Structural nodes]
+        PRIMITIVE[Primitive Types<br/>string, number, boolean<br/>Leaf nodes typically<br/>Data collection nodes]
+        CONDITIONAL[Conditional Types<br/>if_block<br/>Controls visibility<br/>Dynamic relationships]
+        ENUM_TYPE[Enum Types<br/>Fixed option set<br/>Selection nodes<br/>Value constraint nodes]
+    end
+    
+    %% Validation Relationships
+    subgraph "Validation & Dependency Flow"
+        FIELD_VAL[Field Validation<br/>Node-level rules<br/>Type-specific checks<br/>Property constraints]
+        CROSS_VAL[Cross-Field Validation<br/>Dependencies property<br/>Inter-node relationships<br/>Conditional validation]
+        TREE_VAL[Tree Validation<br/>Parent-child consistency<br/>Circular reference check<br/>Structural integrity]
+    end
+    
+    %% Real-World Example Flow
+    subgraph "Example: User Profile Form"
+        USER_ROOT[User Profile<br/>type: object<br/>children: personal, contact, preferences]
+        PERSONAL[Personal Info<br/>type: object<br/>children: firstName, lastName, age]
+        CONTACT[Contact Info<br/>type: object<br/>children: email, phone]
+        PREFS[Preferences<br/>type: object<br/>children: newsletter, theme]
+        FNAME[First Name<br/>type: string<br/>required: true]
+        EMAIL[Email<br/>type: string<br/>format: email]
+        NEWSLETTER[Newsletter<br/>type: boolean<br/>depends on email]
+    end
+    
+    %% Connections - Main Flow
+    GRAPH --> ACCESS
+    GRAPH --> ROOT_ACCESS
+    ACCESS --> PARENT
+    ACCESS --> CHILD_NODE
+    
+    %% Parent-Child Flow
+    PARENT --> CHILD_LIST
+    CHILD_LIST -.->|contains IDs| CHILD_NODE
+    CHILD_NODE -.->|references| PARENT
+    CHILD_NODE -.->|broken reference| ORPHAN
+    
+    %% Navigation Flow
+    ACCESS --> DFS
+    ACCESS --> BFS
+    CHILD_NODE --> PARENT_LOOKUP
+    PARENT --> CHILD_ITERATION
+    
+    %% Type Relationships
+    CONTAINER --> PARENT
+    PRIMITIVE --> CHILD_NODE
+    CONDITIONAL -.->|controls| CHILD_NODE
+    ENUM_TYPE --> CHILD_NODE
+    
+    %% Validation Flow
+    CHILD_NODE --> FIELD_VAL
+    PARENT --> CROSS_VAL
+    GRAPH --> TREE_VAL
+    
+    %% Example Connections
+    USER_ROOT --> PERSONAL
+    USER_ROOT --> CONTACT
+    USER_ROOT --> PREFS
+    PERSONAL --> FNAME
+    CONTACT --> EMAIL
+    PREFS --> NEWSLETTER
+    EMAIL -.->|dependency| NEWSLETTER
+    
+    %% Styling
+    classDef graph fill:#1e3a8a,stroke:#60a5fa,stroke-width:3px,color:#e0e7ff,font-size:11px,font-weight:bold
+    classDef relationship fill:#065f46,stroke:#10b981,stroke-width:2px,color:#d1fae5,font-size:10px
+    classDef navigation fill:#7c2d12,stroke:#f97316,stroke-width:2px,color:#fed7aa,font-size:10px
+    classDef type fill:#581c87,stroke:#a855f7,stroke-width:2px,color:#e9d5ff,font-size:10px
+    classDef validation fill:#1e40af,stroke:#3b82f6,stroke-width:2px,color:#dbeafe,font-size:10px
+    classDef example fill:#be123c,stroke:#f43f5e,stroke-width:2px,color:#fecdd3,font-size:10px
+    
+    %% Apply Styles
+    class GRAPH,ACCESS,ROOT_ACCESS graph
+    class PARENT,CHILD_LIST,CHILD_NODE,ORPHAN relationship
+    class DFS,BFS,PARENT_LOOKUP,CHILD_ITERATION navigation
+    class CONTAINER,PRIMITIVE,CONDITIONAL,ENUM_TYPE type
+    class FIELD_VAL,CROSS_VAL,TREE_VAL validation
+    class USER_ROOT,PERSONAL,CONTACT,PREFS,FNAME,EMAIL,NEWSLETTER example

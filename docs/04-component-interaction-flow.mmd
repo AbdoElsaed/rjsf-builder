@@ -1,0 +1,161 @@
+%%{init: {"theme": "dark", "themeVariables": {"fontFamily": "Arial, sans-serif", "fontSize": "12px", "primaryColor": "#1a1a1a", "primaryTextColor": "#ffffff", "lineColor": "#90a4ae", "background": "#0d1117"}, "sequence": {"diagramMarginX": 30, "diagramMarginY": 20, "actorMargin": 40, "boxMargin": 10}}}%%
+sequenceDiagram
+    participant U as User
+    participant FP as Field Palette
+    participant C as Canvas
+    participant FN as Form Node
+    participant FCP as Field Config Panel
+    participant PP as Preview Panel
+    participant SGS as Schema Graph Store
+    participant SGE as Schema Graph Engine
+    participant RJSF as RJSF Form
+    
+    Note over U,RJSF: Form Building Interaction Flow
+    
+    %% Field Addition Flow
+    U->>FP: Drag field from palette
+    activate FP
+    FP->>C: onDragStart (field type)
+    deactivate FP
+    
+    activate C
+    C->>C: Show drop zones
+    U->>C: Drop field in canvas
+    C->>SGS: addNode(fieldData, parentId)
+    deactivate C
+    
+    activate SGS
+    SGS->>SGE: engine.addNode(graph, fieldData, parentId)
+    activate SGE
+    SGE->>SGE: Generate unique ID
+    SGE->>SGE: Validate field placement
+    SGE->>SGE: Update graph structure
+    SGE-->>SGS: return newGraph
+    deactivate SGE
+    SGS->>SGS: set({ graph: newGraph })
+    SGS-->>C: notify subscribers
+    SGS-->>PP: notify subscribers
+    deactivate SGS
+    
+    activate C
+    C->>FN: Render new FormNode
+    deactivate C
+    activate FN
+    FN->>FN: Display field with drag handle
+    deactivate FN
+    
+    activate PP
+    PP->>SGS: compileToJsonSchema()
+    PP->>RJSF: Update form with new schema
+    deactivate PP
+    
+    %% Field Selection Flow
+    U->>FN: Click on field
+    activate FN
+    FN->>C: onNodeSelect(nodeId)
+    deactivate FN
+    activate C
+    C->>FCP: Update selectedNodeId
+    deactivate C
+    
+    activate FCP
+    FCP->>SGS: get node data
+    FCP->>FCP: Load field configuration
+    FCP->>FCP: Display config options
+    deactivate FCP
+    
+    %% Field Configuration Flow
+    U->>FCP: Modify field properties
+    activate FCP
+    FCP->>SGS: updateNode(nodeId, updates)
+    deactivate FCP
+    
+    activate SGS
+    SGS->>SGE: engine.updateNode(graph, nodeId, updates)
+    activate SGE
+    SGE->>SGE: Validate updates
+    SGE->>SGE: Merge properties
+    SGE-->>SGS: return updatedGraph
+    deactivate SGE
+    SGS-->>FN: notify subscribers
+    SGS-->>PP: notify subscribers
+    deactivate SGS
+    
+    activate FN
+    FN->>FN: Update field display
+    deactivate FN
+    
+    activate PP
+    PP->>SGS: compileToJsonSchema()
+    PP->>RJSF: Re-render form with updates
+    deactivate PP
+    
+    %% Field Reordering Flow
+    U->>FN: Drag field to reorder
+    activate FN
+    FN->>C: onDragEnd (sortable operation)
+    deactivate FN
+    
+    activate C
+    C->>SGS: reorderNode(nodeId, newIndex)
+    deactivate C
+    
+    activate SGS
+    SGS->>SGE: engine.reorderNode(graph, nodeId, newIndex)
+    activate SGE
+    SGE->>SGE: Update children array order
+    SGE-->>SGS: return reorderedGraph
+    deactivate SGE
+    SGS-->>C: notify subscribers
+    SGS-->>PP: notify subscribers
+    deactivate SGS
+    
+    activate C
+    C->>C: Re-render with new order
+    deactivate C
+    
+    activate PP
+    PP->>RJSF: Update form layout
+    deactivate PP
+    
+    %% Nested Field Handling
+    Note over U,RJSF: Nested Field Operations (Object/Array fields)
+    
+    U->>FN: Drag field into Object field
+    activate FN
+    FN->>FN: Check canDropIntoParent()
+    FN->>SGS: addNode(fieldData, objectFieldId)
+    deactivate FN
+    
+    activate SGS
+    SGS->>SGE: engine.addNode(graph, fieldData, objectFieldId)
+    activate SGE
+    SGE->>SGE: Validate parent-child relationship
+    SGE->>SGE: Add to parent's children array
+    SGE-->>SGS: return updatedGraph
+    deactivate SGE
+    SGS-->>FN: notify subscribers (nested rendering)
+    SGS-->>PP: notify subscribers
+    deactivate SGS
+    
+    %% Error Handling Flow
+    Note over U,RJSF: Error Handling
+    
+    U->>FCP: Enter invalid configuration
+    activate FCP
+    FCP->>SGS: updateNode(nodeId, invalidData)
+    deactivate FCP
+    
+    activate SGS
+    SGS->>SGE: engine.updateNode(graph, nodeId, invalidData)
+    activate SGE
+    SGE->>SGE: validateField(fieldData)
+    SGE-->>SGS: return { valid: false, errors: [...] }
+    deactivate SGE
+    SGS-->>FCP: validation errors
+    deactivate SGS
+    
+    activate FCP
+    FCP->>FCP: Display error messages
+    FCP->>FCP: Highlight invalid fields
+    deactivate FCP

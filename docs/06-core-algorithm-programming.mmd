@@ -1,0 +1,141 @@
+%%{init: {"theme": "dark", "themeVariables": {"fontFamily": "Arial, sans-serif", "fontSize": "12px", "primaryColor": "#1a1a1a", "primaryTextColor": "#ffffff", "lineColor": "#90a4ae", "background": "#0d1117"}, "flowchart": {"nodeSpacing": 40, "rankSpacing": 70, "padding": 20}}}%%
+flowchart TD
+    %% Core Classes and Interfaces
+    subgraph "Core Programming Structure"
+        A[SchemaGraphEngine Class<br/>Pure Business Logic]
+        B[FieldValidators Class<br/>Static Validation Methods]
+        C[FieldNode Interface<br/>Data Structure]
+        D[SchemaGraph Interface<br/>Graph Container]
+        E[JSONSchemaType Union<br/>Type Definitions]
+    end
+    
+    %% Data Structures Deep Dive
+    subgraph "Data Structure Hierarchy"
+        F[FieldNode Properties<br/>id: string, key: string<br/>type: JSONSchemaType, title: string<br/>children: optional string array, parentId: optional string]
+        G[SchemaGraph Structure<br/>nodes: Record of string to FieldNode<br/>rootId: string]
+        H[Field Types<br/>string, number, boolean<br/>object, array, enum, if_block]
+    end
+    
+    %% Core Algorithm Methods
+    subgraph "SchemaGraphEngine Methods"
+        I[addNode Method<br/>Parameters: graph, nodeData, parentId<br/>Returns: SchemaGraph<br/>Complexity: O-1]
+        J[removeNode Method<br/>Parameters: graph, nodeId<br/>Returns: SchemaGraph<br/>Complexity: O-n recursive]
+        K[updateNode Method<br/>Parameters: graph, nodeId, updates<br/>Returns: SchemaGraph<br/>Complexity: O-1]
+        L[moveNode Method<br/>Parameters: graph, nodeId, newParentId<br/>Returns: SchemaGraph<br/>Complexity: O-1]
+        M[compileToJsonSchema Method<br/>Parameters: graph<br/>Returns: RJSFSchema<br/>Complexity: O-n tree traversal]
+    end
+    
+    %% Memory Management and Immutability
+    subgraph "Memory Management Strategy"
+        N[deepClone Method<br/>JSON.parse JSON.stringify obj<br/>Creates complete copy<br/>Breaks object references]
+        O[Immutable Operations<br/>Never mutate input graph<br/>Always return new instance<br/>Functional programming pattern]
+        P[Memory Allocation<br/>New graph per operation<br/>Old graphs eligible for GC<br/>Predictable memory usage]
+    end
+    
+    %% Validation System Programming
+    subgraph "Validation Algorithm Chain"
+        Q[FieldValidators.validateField<br/>Static method dispatch<br/>Returns: valid boolean, errors array]
+        R[validateStringField<br/>minLength/maxLength logic<br/>pattern regex validation<br/>format enum checking]
+        S[validateNumberField<br/>minimum/maximum bounds<br/>multipleOf validation<br/>exclusiveMinimum logic]
+        T[validateArrayField<br/>minItems/maxItems bounds<br/>uniqueItems boolean check]
+        U[validateEnumField<br/>enum array validation<br/>enumNames consistency check]
+    end
+    
+    %% Helper Algorithm Methods
+    subgraph "Utility Programming Functions"
+        V[generateUniqueKey Method<br/>String manipulation algorithm<br/>Regex replacement chain<br/>Random suffix generation]
+        W[canDropIntoParent Method<br/>Type compatibility logic<br/>Recursive parent checking<br/>Array consistency validation]
+        X[isDescendant Method<br/>Cycle detection algorithm<br/>Tree traversal upward<br/>Parent chain following]
+    end
+    
+    %% JSON Schema Compilation Algorithm
+    subgraph "Schema Compilation Programming"
+        Y[compileToJsonSchema Algorithm<br/>Depth-first tree traversal<br/>Recursive node processing<br/>Schema object construction]
+        Z[Node Type Mapping<br/>Switch statement dispatch<br/>Type-specific compilation<br/>Property object building]
+        AA[Validation Rule Mapping<br/>FieldNode to JSON Schema<br/>Constraint transformation<br/>Required array building]
+        BB[Conditional Logic Compilation<br/>IF-THEN-ELSE processing<br/>Schema condition building<br/>Branch compilation]
+    end
+    
+    %% Programming Flow Connections
+    A --> I
+    A --> J
+    A --> K
+    A --> L
+    A --> M
+    A --> N
+    A --> V
+    A --> W
+    A --> X
+    
+    B --> Q
+    Q --> R
+    Q --> S
+    Q --> T
+    Q --> U
+    
+    C --> F
+    D --> G
+    E --> H
+    
+    I --> N
+    J --> N
+    K --> N
+    L --> N
+    M --> N
+    
+    N --> O
+    O --> P
+    
+    M --> Y
+    Y --> Z
+    Z --> AA
+    Y --> BB
+    
+    I --> W
+    J --> X
+    
+    %% Error Handling Programming Pattern
+    subgraph "Error Handling Strategy"
+        CC[Validation Result Pattern<br/>valid boolean, errors array<br/>No exceptions thrown<br/>Explicit error returns]
+        DD[Guard Clauses<br/>Early return pattern<br/>Input validation first<br/>Prevent invalid states]
+        EE[Type Safety<br/>TypeScript interfaces<br/>Compile-time checking<br/>Runtime type guards]
+    end
+    
+    Q --> CC
+    I --> DD
+    J --> DD
+    K --> DD
+    L --> DD
+    A --> EE
+    
+    %% Performance Optimization Patterns
+    subgraph "Performance Programming Patterns"
+        FF[Structural Sharing Opportunity<br/>Current: Full deep clone<br/>Potential: Immutable.js<br/>Memory optimization]
+        GG[Memoization Opportunity<br/>Cache validation results<br/>Schema compilation cache<br/>Performance optimization]
+        HH[Lazy Evaluation<br/>Defer expensive operations<br/>On-demand compilation<br/>Performance improvement]
+    end
+    
+    N -.->|can be optimized| FF
+    Q -.->|can be cached| GG
+    M -.->|can be lazy| HH
+    
+    %% Dark Mode Enhanced Styling
+    classDef coreClass fill:#1e3a8a,stroke:#60a5fa,stroke-width:3px,color:#e0e7ff,font-size:12px,font-weight:bold
+    classDef dataStructure fill:#14532d,stroke:#4ade80,stroke-width:3px,color:#dcfce7,font-size:12px,font-weight:bold
+    classDef algorithm fill:#581c87,stroke:#c084fc,stroke-width:3px,color:#f3e8ff,font-size:12px,font-weight:bold
+    classDef memory fill:#9a3412,stroke:#fb923c,stroke-width:3px,color:#fed7aa,font-size:12px,font-weight:bold
+    classDef validation fill:#0c4a6e,stroke:#38bdf8,stroke-width:3px,color:#e0f2fe,font-size:12px,font-weight:bold
+    classDef utility fill:#be185d,stroke:#f472b6,stroke-width:3px,color:#fce7f3,font-size:12px,font-weight:bold
+    classDef compilation fill:#713f12,stroke:#fbbf24,stroke-width:3px,color:#fef3c7,font-size:12px,font-weight:bold
+    classDef errorHandling fill:#991b1b,stroke:#f87171,stroke-width:3px,color:#fecaca,font-size:12px,font-weight:bold
+    classDef performance fill:#374151,stroke:#9ca3af,stroke-width:3px,color:#f3f4f6,font-size:12px,font-weight:bold
+    
+    class A,B,C,D,E coreClass
+    class F,G,H dataStructure
+    class I,J,K,L,M algorithm
+    class N,O,P memory
+    class Q,R,S,T,U validation
+    class V,W,X utility
+    class Y,Z,AA,BB compilation
+    class CC,DD,EE errorHandling
+    class FF,GG,HH performance

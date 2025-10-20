@@ -1,0 +1,119 @@
+%%{init: {"theme": "dark", "themeVariables": {"fontFamily": "Arial, sans-serif", "fontSize": "12px", "primaryColor": "#1a1a1a", "primaryTextColor": "#ffffff", "lineColor": "#90a4ae", "background": "#0d1117"}, "flowchart": {"nodeSpacing": 50, "rankSpacing": 80, "padding": 25}}}%%
+flowchart TB
+    %% SchemaGraph Root Structure
+    subgraph "SchemaGraph Interface"
+        SG[SchemaGraph<br/>nodes: Record string to FieldNode<br/>rootId: string]
+    end
+    
+    %% FieldNode Core Structure
+    subgraph "FieldNode Core Properties"
+        FN[FieldNode Interface<br/>id: string, key: string<br/>type: JSONSchemaType<br/>title: string, description: optional string<br/>required: optional boolean, default: SchemaDefaultValue]
+    end
+    
+    %% Node Type System
+    subgraph "JSONSchemaType Values"
+        ST[String Type<br/>Basic text input<br/>Validation: pattern, format<br/>Length: minLength, maxLength]
+        NT[Number Type<br/>Numeric input<br/>Range: minimum, maximum<br/>Multiple: multipleOf]
+        BT[Boolean Type<br/>Checkbox or toggle<br/>True/false values<br/>No additional props]
+        OT[Object Type<br/>Container for other fields<br/>Properties: minProperties, maxProperties<br/>Children array required]
+        AT[Array Type<br/>List of items<br/>Items: minItems, maxItems<br/>Unique: uniqueItems boolean]
+        ET[Enum Type<br/>Dropdown selection<br/>enum: string array<br/>enumNames: display labels]
+        IT[If Block Type<br/>Conditional logic<br/>condition, then, else<br/>Dynamic field visibility]
+    end
+    
+    %% Tree Structure Relationships
+    subgraph "Tree Structure Properties"
+        TS[Tree Relationships<br/>children: optional string array<br/>parentId: optional string<br/>position: x y coordinates]
+        ROOT[Root Node<br/>parentId: undefined<br/>Entry point of graph<br/>Referenced by rootId]
+        CHILD[Child Nodes<br/>parentId: parent node id<br/>Listed in parent.children<br/>Can have own children]
+        LEAF[Leaf Nodes<br/>children: empty or undefined<br/>Terminal nodes<br/>No descendants]
+    end
+    
+    %% Field-Specific Properties
+    subgraph "Type-Specific Properties"
+        SP[String Properties<br/>minLength, maxLength: number<br/>pattern: regex string<br/>format: email, date, uri]
+        NP[Number Properties<br/>minimum, maximum: number<br/>exclusiveMinimum, exclusiveMaximum<br/>multipleOf: number]
+        AP[Array Properties<br/>minItems, maxItems: number<br/>uniqueItems: boolean<br/>additionalItems: boolean]
+        OP[Object Properties<br/>minProperties, maxProperties: number<br/>additionalProperties: boolean<br/>Contains child field definitions]
+        EP[Enum Properties<br/>enum: allowed values array<br/>enumNames: display names<br/>Must match enum length]
+        IP[If Block Properties<br/>condition: field, operator, value<br/>then: field ids to show<br/>else: field ids to show]
+    end
+    
+    %% Validation System
+    subgraph "Validation Properties"
+        VP[Validation Object<br/>Overrides for base properties<br/>minLength, maxLength, pattern<br/>minimum, maximum values]
+    end
+    
+    %% UI Configuration
+    subgraph "UI Schema Properties"
+        UI[UI Configuration<br/>ui:widget: input type<br/>ui:options: behavior flags<br/>addable, orderable, removable]
+    end
+    
+    %% Dependencies System
+    subgraph "Dependencies System"
+        DEP[Dependencies<br/>Record of string to unknown<br/>Field interdependencies<br/>Dynamic schema changes]
+    end
+    
+    %% Example Graph Structure
+    subgraph "Example Schema Graph Tree"
+        R[Root Object<br/>id: root-1<br/>type: object<br/>children: name, age, address]
+        N1[Name Field<br/>id: field-1<br/>type: string<br/>parentId: root-1]
+        N2[Age Field<br/>id: field-2<br/>type: number<br/>parentId: root-1]
+        N3[Address Object<br/>id: field-3<br/>type: object<br/>parentId: root-1<br/>children: street, city]
+        N4[Street Field<br/>id: field-4<br/>type: string<br/>parentId: field-3]
+        N5[City Field<br/>id: field-5<br/>type: string<br/>parentId: field-3]
+    end
+    
+    %% Connections - Main Structure
+    SG --> FN
+    FN --> ST
+    FN --> NT
+    FN --> BT
+    FN --> OT
+    FN --> AT
+    FN --> ET
+    FN --> IT
+    
+    %% Tree Structure Connections
+    FN --> TS
+    TS --> ROOT
+    TS --> CHILD
+    TS --> LEAF
+    
+    %% Type-Specific Property Connections
+    ST -.-> SP
+    NT -.-> NP
+    AT -.-> AP
+    OT -.-> OP
+    ET -.-> EP
+    IT -.-> IP
+    
+    %% Additional Property Connections
+    FN -.-> VP
+    FN -.-> UI
+    FN -.-> DEP
+    
+    %% Example Tree Connections
+    R --> N1
+    R --> N2
+    R --> N3
+    N3 --> N4
+    N3 --> N5
+    
+    %% Graph Structure Connection
+    SG -.->|contains| R
+    SG -.->|rootId points to| R
+    
+    %% Styling
+    classDef interface fill:#1e3a8a,stroke:#60a5fa,stroke-width:3px,color:#e0e7ff,font-size:12px,font-weight:bold
+    classDef type fill:#065f46,stroke:#10b981,stroke-width:2px,color:#d1fae5,font-size:11px
+    classDef property fill:#7c2d12,stroke:#f97316,stroke-width:2px,color:#fed7aa,font-size:11px
+    classDef example fill:#581c87,stroke:#a855f7,stroke-width:2px,color:#e9d5ff,font-size:11px
+    classDef tree fill:#1e40af,stroke:#3b82f6,stroke-width:2px,color:#dbeafe,font-size:11px
+    
+    %% Apply Styles
+    class SG,FN interface
+    class ST,NT,BT,OT,AT,ET,IT type
+    class SP,NP,AP,OP,EP,IP,VP,UI,DEP property
+    class R,N1,N2,N3,N4,N5 example
+    class TS,ROOT,CHILD,LEAF tree

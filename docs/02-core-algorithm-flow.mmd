@@ -1,0 +1,90 @@
+%%{init: {"theme": "dark", "themeVariables": {"fontFamily": "Arial, sans-serif", "fontSize": "13px", "primaryColor": "#1a1a1a", "primaryTextColor": "#ffffff", "lineColor": "#90a4ae", "background": "#0d1117"}, "flowchart": {"nodeSpacing": 40, "rankSpacing": 60, "padding": 20}}}%%
+flowchart TD
+    %% User Actions
+    A[User Action] -->|drag field| B{Action Type?}
+    B -->|Add Field| C[Add Node Operation]
+    B -->|Remove Field| D[Remove Node Operation]  
+    B -->|Update Field| E[Update Node Operation]
+    B -->|Move Field| F[Move Node Operation]
+    B -->|Reorder Field| G[Reorder Node Operation]
+    
+    %% Core Algorithm Flow
+    C --> H[Schema Graph Engine.addNode]
+    D --> I[Schema Graph Engine.removeNode]
+    E --> J[Schema Graph Engine.updateNode]
+    F --> K[Schema Graph Engine.moveNode]
+    G --> L[Schema Graph Engine.reorderNode]
+    
+    %% Engine Processing
+    H --> M[Generate Unique ID]
+    I --> N[Validate Dependencies]
+    J --> O[Merge Updates]
+    K --> P[Update Parent-Child Links]
+    L --> Q[Reorder Children Array]
+    
+    M --> R[Update Graph Structure]
+    N --> R
+    O --> R  
+    P --> R
+    Q --> R
+    
+    %% Validation Phase
+    R --> S[Field Validators.validateField]
+    S --> T{Valid?}
+    T -->|No| U[Return Error State]
+    T -->|Yes| V[Graph Structure Validation]
+    
+    V --> W{Graph Valid?}
+    W -->|No| U
+    W -->|Yes| X[Update Zustand Store]
+    
+    %% State Update & Conversion
+    X --> Y[Trigger Store Subscribers]
+    Y --> Z[Schema Conversion Pipeline]
+    
+    %% Conversion Pipeline
+    Z --> AA[SchemaGraphEngine.compileToJsonSchema]
+    AA --> BB[Convert Field Nodes to JSON Schema]
+    BB --> CC[Handle Conditional Logic<br/>IF-THEN-ELSE blocks]
+    CC --> DD[Apply Field Validations]
+    DD --> EE[Generate Properties Object]
+    EE --> FF[Set Required Fields Array]
+    FF --> GG[Complete JSON Schema Output]
+    
+    %% UI Updates
+    GG --> HH[Update Preview Panel]
+    GG --> II[Update Field Config Panel]
+    HH --> JJ[RJSF Form Re-render]
+    II --> KK[Config Options Refresh]
+    
+    %% Data Migration (for schema changes)
+    X --> LL[Form Data Migration]
+    LL --> MM[Compare Old vs New Schema]
+    MM --> NN[Migrate Existing Form Values]
+    NN --> OO[Update Form Data Store]
+    
+    %% UI Schema Updates
+    X --> PP[UI Schema Processing]
+    PP --> QQ[Widget Configuration]
+    QQ --> RR[Apply UI Customizations]
+    RR --> JJ
+    
+    %% Error Handling
+    U --> SS[Display Error Messages]
+    SS --> TT[Highlight Invalid Fields]
+    TT --> UU[Block Invalid Operations]
+    
+    %% Dark Mode Enhanced Styling
+    classDef userAction fill:#1e3a8a,stroke:#60a5fa,stroke-width:3px,color:#e0e7ff,font-size:13px,font-weight:bold
+    classDef engine fill:#14532d,stroke:#4ade80,stroke-width:3px,color:#dcfce7,font-size:13px,font-weight:bold
+    classDef validation fill:#9a3412,stroke:#fb923c,stroke-width:3px,color:#fed7aa,font-size:13px,font-weight:bold
+    classDef conversion fill:#581c87,stroke:#c084fc,stroke-width:3px,color:#f3e8ff,font-size:13px,font-weight:bold
+    classDef ui fill:#0c4a6e,stroke:#38bdf8,stroke-width:3px,color:#e0f2fe,font-size:13px,font-weight:bold
+    classDef error fill:#991b1b,stroke:#f87171,stroke-width:3px,color:#fecaca,font-size:13px,font-weight:bold
+    
+    class A,B userAction
+    class C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R engine
+    class S,T,V,W validation
+    class Z,AA,BB,CC,DD,EE,FF,GG conversion
+    class HH,II,JJ,KK,LL,MM,NN,OO,PP,QQ,RR ui
+    class U,SS,TT,UU error

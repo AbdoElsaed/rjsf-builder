@@ -1,0 +1,205 @@
+%%{init: {"theme": "dark", "themeVariables": {"fontFamily": "Arial, sans-serif", "fontSize": "11px", "primaryColor": "#1a1a1a", "primaryTextColor": "#ffffff", "lineColor": "#90a4ae", "background": "#0d1117"}, "flowchart": {"nodeSpacing": 35, "rankSpacing": 60, "padding": 20}}}%%
+flowchart TD
+    %% Function Entry Points
+    subgraph "Public API Methods - Entry Points"
+        A[addNode graph nodeData parentId]
+        B[removeNode graph nodeId]
+        C[updateNode graph nodeId updates]
+        D[moveNode graph nodeId newParentId]
+        E[compileToJsonSchema graph]
+    end
+    
+    %% Execution Step 1: Input Validation & Cloning
+    subgraph "Step 1: Input Processing"
+        F[const newGraph = this.deepClone graph]
+        G[Input parameter validation]
+        H[Type checking with TypeScript]
+        I[Guard clauses execution]
+    end
+    
+    %% Execution Step 2: Core Algorithm Logic
+    subgraph "Step 2: Algorithm Logic Execution"
+        J[Generate UUID with uuidv4]
+        K[Call generateUniqueKey title]
+        L[Build new FieldNode object]
+        M[Update parent.children array]
+        N[Set node.parentId reference]
+        O[Recursive tree operations]
+    end
+    
+    %% Execution Step 3: Validation Chain
+    subgraph "Step 3: Validation Execution"
+        P[FieldValidators.validateField node]
+        Q[Switch statement on node.type]
+        R[Execute type-specific validator]
+        S[Collect validation errors array]
+        T[Return validation result object]
+    end
+    
+    %% Execution Step 4: Graph Structure Updates
+    subgraph "Step 4: Graph Mutation on clone"
+        U[newGraph.nodes newId equals newNode]
+        V[parent.children.push newId]
+        W[Update parentId references]
+        X[Maintain tree integrity]
+        Y[Preserve immutability contract]
+    end
+    
+    %% Execution Step 5: Schema Compilation for compileToJsonSchema
+    subgraph "Step 5: JSON Schema Compilation"
+        Z[Initialize empty schema object]
+        AA[Depth-first tree traversal]
+        BB[For each node: switch node.type]
+        CC[Map FieldNode properties to JSON Schema]
+        DD[Build properties object recursively]
+        EE[Collect required fields array]
+        FF[Handle conditional logic if blocks]
+    end
+    
+    %% Memory Management Execution
+    subgraph "Memory Management Execution"
+        GG[JSON.stringify obj - Serialization]
+        HH[JSON.parse string - Deserialization]
+        II[New object references created]
+        JJ[Original graph remains immutable]
+        KK[Garbage collection eligible]
+    end
+    
+    %% Error Handling Execution Paths
+    subgraph "Error Handling Execution"
+        LL[if not nodeExists return originalGraph]
+        MM[if wouldCreateCycle return originalGraph]
+        NN[if not validation.valid return errors]
+        OO[try-catch for JSON operations]
+        PP[Graceful failure recovery]
+    end
+    
+    %% Return Value Processing
+    subgraph "Return Value Construction"
+        QQ[return newGraph for mutations]
+        RR[return jsonSchema for compilation]
+        SS[return validation result]
+        TT[Maintain type safety]
+        UU[Consistent return patterns]
+    end
+    
+    %% Main Execution Flow Connections
+    A --> F
+    B --> F
+    C --> F
+    D --> F
+    E --> Z
+    
+    F --> G
+    G --> H
+    H --> I
+    I --> J
+    
+    J --> K
+    K --> L
+    L --> M
+    M --> N
+    N --> O
+    
+    %% Validation Flow
+    A --> P
+    C --> P
+    P --> Q
+    Q --> R
+    R --> S
+    S --> T
+    
+    %% Graph Update Flow
+    L --> U
+    M --> V
+    N --> W
+    O --> X
+    X --> Y
+    
+    %% Compilation Flow
+    E --> AA
+    AA --> BB
+    BB --> CC
+    CC --> DD
+    DD --> EE
+    EE --> FF
+    
+    %% Memory Management Flow
+    F --> GG
+    GG --> HH
+    HH --> II
+    II --> JJ
+    JJ --> KK
+    
+    %% Error Handling Flow
+    I --> LL
+    O --> MM
+    T --> NN
+    GG --> OO
+    OO --> PP
+    
+    %% Return Flow
+    Y --> QQ
+    FF --> RR
+    T --> SS
+    QQ --> TT
+    RR --> TT
+    SS --> TT
+    TT --> UU
+    
+    %% Performance Optimization Opportunities
+    subgraph "Performance Optimization Points"
+        VV[Memoize generateUniqueKey results]
+        WW[Cache validation results]
+        XX[Structural sharing instead of deep clone]
+        YY[Lazy compilation of unused branches]
+        ZZ[Batch operations for multiple changes]
+    end
+    
+    K -.->|can optimize| VV
+    P -.->|can optimize| WW
+    F -.->|can optimize| XX
+    AA -.->|can optimize| YY
+    A -.->|can optimize| ZZ
+    
+    %% Code Complexity Analysis
+    subgraph "Algorithm Complexity Analysis"
+        AAA[addNode: O-1 average case]
+        BBB[removeNode: O-n recursive deletion]
+        CCC[updateNode: O-1 direct access]
+        DDD[moveNode: O-1 reference updates]
+        EEE[compileToJsonSchema: O-n tree traversal]
+        FFF[deepClone: O-n object serialization]
+    end
+    
+    A -.->|complexity| AAA
+    B -.->|complexity| BBB
+    C -.->|complexity| CCC
+    D -.->|complexity| DDD
+    E -.->|complexity| EEE
+    F -.->|complexity| FFF
+    
+    %% Dark Mode Enhanced Styling
+    classDef entryPoint fill:#1e3a8a,stroke:#60a5fa,stroke-width:3px,color:#e0e7ff,font-size:11px,font-weight:bold
+    classDef processing fill:#14532d,stroke:#4ade80,stroke-width:3px,color:#dcfce7,font-size:11px,font-weight:bold
+    classDef algorithm fill:#581c87,stroke:#c084fc,stroke-width:3px,color:#f3e8ff,font-size:11px,font-weight:bold
+    classDef validation fill:#0c4a6e,stroke:#38bdf8,stroke-width:3px,color:#e0f2fe,font-size:11px,font-weight:bold
+    classDef mutation fill:#9a3412,stroke:#fb923c,stroke-width:3px,color:#fed7aa,font-size:11px,font-weight:bold
+    classDef compilation fill:#713f12,stroke:#fbbf24,stroke-width:3px,color:#fef3c7,font-size:11px,font-weight:bold
+    classDef memory fill:#be185d,stroke:#f472b6,stroke-width:3px,color:#fce7f3,font-size:11px,font-weight:bold
+    classDef errorHandling fill:#991b1b,stroke:#f87171,stroke-width:3px,color:#fecaca,font-size:11px,font-weight:bold
+    classDef returnValue fill:#374151,stroke:#9ca3af,stroke-width:3px,color:#f3f4f6,font-size:11px,font-weight:bold
+    classDef optimization fill:#4c1d95,stroke:#a78bfa,stroke-width:3px,color:#ede9fe,font-size:11px,font-weight:bold
+    classDef complexity fill:#1f2937,stroke:#6b7280,stroke-width:3px,color:#e5e7eb,font-size:11px,font-weight:bold
+    
+    class A,B,C,D,E entryPoint
+    class F,G,H,I processing
+    class J,K,L,M,N,O algorithm
+    class P,Q,R,S,T validation
+    class U,V,W,X,Y mutation
+    class Z,AA,BB,CC,DD,EE,FF compilation
+    class GG,HH,II,JJ,KK memory
+    class LL,MM,NN,OO,PP errorHandling
+    class QQ,RR,SS,TT,UU returnValue
+    class VV,WW,XX,YY,ZZ optimization
+    class AAA,BBB,CCC,DDD,EEE,FFF complexity

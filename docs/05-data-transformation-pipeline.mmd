@@ -1,0 +1,196 @@
+%%{init: {"theme": "dark", "themeVariables": {"fontFamily": "Arial, sans-serif", "fontSize": "12px", "primaryColor": "#1a1a1a", "primaryTextColor": "#ffffff", "lineColor": "#90a4ae", "background": "#0d1117"}, "flowchart": {"nodeSpacing": 40, "rankSpacing": 60, "padding": 20}}}%%
+flowchart TB
+    %% Input: Schema Graph
+    subgraph "Input: Schema Graph Structure"
+        A[Schema Graph<br/>Tree of Field Nodes]
+        B[Root Node<br/>type: object]
+        C[Field Nodes<br/>Properties & Validation]
+        D[Parent-Child Relationships<br/>children arrays]
+        E[Conditional Logic<br/>IF-THEN-ELSE blocks]
+        
+        A --> B
+        A --> C  
+        A --> D
+        A --> E
+    end
+    
+    %% Transformation Engine
+    subgraph "Schema Graph Engine - Compilation Process"
+        F[compileToJsonSchema Method]
+        G[Node Traversal<br/>Depth-First Processing]
+        H[Field Type Mapping<br/>Graph to JSON Schema types]
+        I[Property Generation<br/>Convert field properties]
+        J[Validation Rules<br/>Apply constraints]
+        K[Conditional Logic Processing<br/>IF-THEN-ELSE to allOf/anyOf]
+        
+        F --> G
+        G --> H
+        H --> I
+        I --> J
+        J --> K
+    end
+    
+    %% Field Type Transformations
+    subgraph "Field Type Transformations"
+        L[String Field<br/>to JSON Schema string]
+        M[Number Field<br/>to JSON Schema number]
+        N[Boolean Field<br/>to JSON Schema boolean]
+        O[Object Field<br/>to JSON Schema object with properties]
+        P[Array Field<br/>to JSON Schema array with items]
+        Q[Enum Field<br/>to JSON Schema string with enum]
+        R[IF Block<br/>to JSON Schema conditional]
+    end
+    
+    H --> L
+    H --> M
+    H --> N
+    H --> O
+    H --> P
+    H --> Q
+    H --> R
+    
+    %% Validation Transformation
+    subgraph "Validation Rules Transformation"
+        S[minLength/maxLength<br/>to JSON Schema constraints]
+        T[minimum/maximum<br/>to number validation]
+        U[pattern<br/>to regex validation]
+        V[required fields<br/>to required array]
+        W[format<br/>to format validation]
+        X[custom validation<br/>to validation keywords]
+    end
+    
+    J --> S
+    J --> T
+    J --> U
+    J --> V
+    J --> W
+    J --> X
+    
+    %% Conditional Logic Transformation
+    subgraph "Conditional Logic Transformation"
+        Y[IF Block Condition<br/>field + operator + value]
+        Z[THEN Branch<br/>child nodes]
+        AA[ELSE Branch<br/>child nodes]
+        BB[Generate JSON Schema IF<br/>properties with const values]
+        CC[Generate THEN Schema<br/>properties object]
+        DD[Generate ELSE Schema<br/>properties object]
+    end
+    
+    K --> Y
+    Y --> Z
+    Y --> AA
+    Z --> BB
+    Z --> CC
+    AA --> DD
+    
+    %% Output: JSON Schema
+    subgraph "Output: JSON Schema RJSF Compatible"
+        EE[Complete JSON Schema Object]
+        FF[Root Properties Object]
+        GG[Required Fields Array]
+        HH[Field Definitions & Types]
+        II[Validation Constraints]
+        JJ[Conditional Logic Blocks]
+        
+        EE --> FF
+        EE --> GG
+        EE --> HH
+        EE --> II
+        EE --> JJ
+    end
+    
+    %% Final Processing
+    L --> EE
+    M --> EE
+    N --> EE
+    O --> EE
+    P --> EE
+    Q --> EE
+    R --> EE
+    S --> II
+    T --> II
+    U --> II
+    V --> GG
+    W --> II
+    X --> II
+    BB --> JJ
+    CC --> JJ
+    DD --> JJ
+    
+    %% UI Schema Integration
+    subgraph "UI Schema Integration"
+        KK[UI Schema Store]
+        LL[Widget Configurations<br/>ui:widget, ui:options]
+        MM[Field Ordering<br/>ui:order]
+        NN[Custom UI Properties<br/>ui:disabled, ui:readonly]
+        
+        KK --> LL
+        KK --> MM
+        KK --> NN
+    end
+    
+    %% Form Data Integration
+    subgraph "Form Data Integration"
+        OO[Form Data Store]
+        PP[Current Form Values]
+        QQ[Default Values<br/>from field definitions]
+        RR[Data Migration<br/>on schema changes]
+        
+        OO --> PP
+        OO --> QQ
+        OO --> RR
+    end
+    
+    %% Final Rendering
+    subgraph "RJSF Form Rendering"
+        SS[JSON Schema Input]
+        TT[UI Schema Input]
+        UU[Form Data Input]
+        VV[RJSF Form Component]
+        WW[Rendered HTML Form]
+        
+        SS --> VV
+        TT --> VV
+        UU --> VV
+        VV --> WW
+    end
+    
+    EE --> SS
+    LL --> TT
+    MM --> TT
+    NN --> TT
+    PP --> UU
+    QQ --> UU
+    
+    %% Example Data Flow
+    subgraph "Example: String Field with Validation"
+        XX[Graph Node:<br/>type: string, minLength: 3, required: true]
+        YY[JSON Schema:<br/>type: string, minLength: 3<br/>+ required array entry]
+        ZZ[UI Schema:<br/>fieldName ui:widget text]
+        AAA[Form Data:<br/>fieldName: user input]
+        
+        XX --> YY
+        YY --> ZZ
+        ZZ --> AAA
+    end
+    
+    %% Connection to main flow
+    C -.-> XX
+    XX --> L
+    LL -.-> ZZ
+    PP -.-> AAA
+    
+    %% Dark Mode Enhanced Styling
+    classDef inputLayer fill:#14532d,stroke:#4ade80,stroke-width:3px,color:#dcfce7,font-size:13px,font-weight:bold
+    classDef engineLayer fill:#1e3a8a,stroke:#60a5fa,stroke-width:3px,color:#e0e7ff,font-size:13px,font-weight:bold
+    classDef transformLayer fill:#581c87,stroke:#c084fc,stroke-width:3px,color:#f3e8ff,font-size:13px,font-weight:bold
+    classDef outputLayer fill:#9a3412,stroke:#fb923c,stroke-width:3px,color:#fed7aa,font-size:13px,font-weight:bold
+    classDef integrationLayer fill:#0c4a6e,stroke:#38bdf8,stroke-width:3px,color:#e0f2fe,font-size:13px,font-weight:bold
+    classDef exampleLayer fill:#991b1b,stroke:#f87171,stroke-width:3px,color:#fecaca,font-size:13px,font-weight:bold
+    
+    class A,B,C,D,E inputLayer
+    class F,G,H,I,J,K engineLayer
+    class L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,AA,BB,CC,DD transformLayer
+    class EE,FF,GG,HH,II,JJ outputLayer
+    class KK,LL,MM,NN,OO,PP,QQ,RR,SS,TT,UU,VV,WW integrationLayer
+    class XX,YY,ZZ,AAA exampleLayer

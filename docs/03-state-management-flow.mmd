@@ -1,0 +1,138 @@
+%%{init: {"theme": "dark", "themeVariables": {"fontFamily": "Arial, sans-serif", "fontSize": "13px", "primaryColor": "#1a1a1a", "primaryTextColor": "#ffffff", "lineColor": "#90a4ae", "background": "#0d1117"}, "flowchart": {"nodeSpacing": 45, "rankSpacing": 70, "padding": 20}}}%%
+graph TB
+    %% User Interactions
+    A[User Interactions] --> B[Canvas Operations]
+    A --> C[Field Configuration]
+    A --> D[Form Data Entry]
+    
+    %% State Stores
+    subgraph "State Management - Zustand Stores"
+        E[Schema Graph Store<br/>useSchemaGraphStore]
+        F[Form Data Store<br/>useFormDataStore] 
+        G[UI Schema Store<br/>useUiSchemaStore]
+    end
+    
+    %% Store Internal State
+    subgraph "Schema Graph Store State"
+        H[graph: SchemaGraph]
+        I[engine: SchemaGraphEngine]
+        J[Actions:<br/>addNode, removeNode<br/>updateNode, moveNode<br/>compileToJsonSchema]
+    end
+    
+    subgraph "Form Data Store State"
+        K[formData: Record of string to JSONValue]
+        L[Actions:<br/>updateFormData<br/>migrateFormData]
+    end
+    
+    subgraph "UI Schema Store State"
+        M[uiSchema: Record of string to UiSchema]
+        N[Actions:<br/>updateUiSchema<br/>updateFieldUiSchema<br/>removeFieldUiSchema]
+    end
+    
+    %% Store Connections
+    E --> H
+    E --> I  
+    E --> J
+    F --> K
+    F --> L
+    G --> M
+    G --> N
+    
+    %% User Action to Store Mapping
+    B --> E
+    C --> E
+    C --> G
+    D --> F
+    
+    %% Core Engine Integration
+    J -->|delegates to| O[SchemaGraphEngine Methods]
+    O --> P[Pure Business Logic<br/>No Side Effects]
+    P --> Q[Return New Graph State]
+    Q --> E
+    
+    %% Data Flow Between Stores
+    E -->|schema changes| R[Trigger Schema Migration]
+    R --> F
+    E -->|field structure changes| S[Update UI Schema Structure]
+    S --> G
+    
+    %% Component Subscriptions
+    subgraph "Component Subscriptions"
+        T[Canvas Component]
+        U[Field Config Panel]
+        V[Preview Panel]
+        W[Form Node Components]
+    end
+    
+    E -.->|subscribes| T
+    E -.->|subscribes| U
+    E -.->|subscribes| V
+    E -.->|subscribes| W
+    F -.->|subscribes| V
+    G -.->|subscribes| U
+    G -.->|subscribes| V
+    
+    %% Output Generation
+    subgraph "Output Generation"
+        X[JSON Schema Generation]
+        Y[UI Schema Application]
+        Z[Form Data Population]
+    end
+    
+    E -->|compileToJsonSchema| X
+    G -->|apply UI customizations| Y
+    F -->|provide form values| Z
+    
+    %% Final Rendering
+    X --> AA[RJSF Form Rendering]
+    Y --> AA
+    Z --> AA
+    
+    %% Store Update Cycle
+    subgraph "Store Update Cycle"
+        BB[State Change]
+        CC[Notify Subscribers]
+        DD[Component Re-render]  
+        EE[UI Update]
+    end
+    
+    E --> BB
+    F --> BB
+    G --> BB
+    BB --> CC
+    CC --> DD
+    DD --> EE
+    
+    %% Data Migration Flow
+    subgraph "Data Migration on Schema Changes"
+        FF[Old Schema]
+        GG[New Schema]
+        HH[Compare Schema Keys]
+        II[Identify Renamed Fields]
+        JJ[Migrate Form Data]
+        KK[Clean Up Invalid Data]
+    end
+    
+    R --> FF
+    R --> GG
+    FF --> HH
+    GG --> HH
+    HH --> II
+    II --> JJ
+    JJ --> KK
+    KK --> F
+    
+    %% Dark Mode Enhanced Styling
+    classDef userLayer fill:#1e3a8a,stroke:#60a5fa,stroke-width:3px,color:#e0e7ff,font-size:13px,font-weight:bold
+    classDef storeLayer fill:#581c87,stroke:#c084fc,stroke-width:3px,color:#f3e8ff,font-size:13px,font-weight:bold
+    classDef engineLayer fill:#14532d,stroke:#4ade80,stroke-width:3px,color:#dcfce7,font-size:13px,font-weight:bold
+    classDef componentLayer fill:#0c4a6e,stroke:#38bdf8,stroke-width:3px,color:#e0f2fe,font-size:13px,font-weight:bold
+    classDef outputLayer fill:#9a3412,stroke:#fb923c,stroke-width:3px,color:#fed7aa,font-size:13px,font-weight:bold
+    classDef migrationLayer fill:#991b1b,stroke:#f87171,stroke-width:3px,color:#fecaca,font-size:13px,font-weight:bold
+    
+    class A,B,C,D userLayer
+    class E,F,G,H,I,J,K,L,M,N storeLayer
+    class O,P,Q engineLayer
+    class T,U,V,W,BB,CC,DD,EE componentLayer
+    class X,Y,Z,AA outputLayer
+    class FF,GG,HH,II,JJ,KK migrationLayer

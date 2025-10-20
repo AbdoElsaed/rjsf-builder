@@ -1,0 +1,108 @@
+%%{init: {"theme": "dark", "themeVariables": {"fontFamily": "Arial, sans-serif", "fontSize": "10px", "primaryColor": "#1a1a1a", "primaryTextColor": "#ffffff", "lineColor": "#90a4ae", "background": "#0d1117"}, "flowchart": {"nodeSpacing": 30, "rankSpacing": 50, "padding": 15}}}%%
+flowchart TB
+    %% Schema Graph Container
+    subgraph "SchemaGraph: User Registration Form"
+        direction TB
+        SG_INFO[nodes: 12 total nodes<br/>rootId: 'form-root'<br/>Tree depth: 3 levels]
+    end
+    
+    %% Root Level
+    subgraph "Level 0: Root Container"
+        ROOT[🏠 form-root<br/>type: object<br/>title: User Registration<br/>children: personal, account, preferences<br/>parentId: undefined]
+    end
+    
+    %% Level 1: Main Sections
+    subgraph "Level 1: Main Sections"
+        PERSONAL[👤 personal-info<br/>type: object<br/>title: Personal Information<br/>children: firstName, lastName, age<br/>parentId: form-root]
+        
+        ACCOUNT[🔐 account-info<br/>type: object<br/>title: Account Details<br/>children: email, password, confirmPassword<br/>parentId: form-root]
+        
+        PREFS[⚙️ preferences<br/>type: object<br/>title: Preferences<br/>children: newsletter, theme, notifications<br/>parentId: form-root]
+    end
+    
+    %% Level 2: Individual Fields
+    subgraph "Level 2: Personal Fields"
+        FNAME[📝 firstName<br/>type: string<br/>title: First Name<br/>required: true<br/>minLength: 2<br/>parentId: personal-info]
+        
+        LNAME[📝 lastName<br/>type: string<br/>title: Last Name<br/>required: true<br/>minLength: 2<br/>parentId: personal-info]
+        
+        AGE[🔢 age<br/>type: number<br/>title: Age<br/>minimum: 13<br/>maximum: 120<br/>parentId: personal-info]
+    end
+    
+    subgraph "Level 2: Account Fields"
+        EMAIL[📧 email<br/>type: string<br/>title: Email Address<br/>format: email<br/>required: true<br/>parentId: account-info]
+        
+        PASSWORD[🔒 password<br/>type: string<br/>title: Password<br/>minLength: 8<br/>pattern: strong-password<br/>parentId: account-info]
+        
+        CONFIRM[🔒 confirmPassword<br/>type: string<br/>title: Confirm Password<br/>dependencies: password match<br/>parentId: account-info]
+    end
+    
+    subgraph "Level 2: Preference Fields"
+        NEWSLETTER[✉️ newsletter<br/>type: boolean<br/>title: Subscribe to Newsletter<br/>default: false<br/>parentId: preferences]
+        
+        THEME[🎨 theme<br/>type: enum<br/>title: UI Theme<br/>enum: light, dark, auto<br/>enumNames: Light, Dark, Auto<br/>parentId: preferences]
+        
+        NOTIFICATIONS[🔔 notifications<br/>type: if_block<br/>condition: newsletter equals true<br/>then: emailFreq, smsAlerts<br/>parentId: preferences]
+    end
+    
+    %% Conditional Fields (Level 3)
+    subgraph "Level 3: Conditional Fields"
+        EMAIL_FREQ[📅 emailFreq<br/>type: enum<br/>title: Email Frequency<br/>enum: daily, weekly, monthly<br/>parentId: notifications<br/>visible: if newsletter true]
+        
+        SMS_ALERTS[📱 smsAlerts<br/>type: boolean<br/>title: SMS Alerts<br/>default: false<br/>parentId: notifications<br/>visible: if newsletter true]
+    end
+    
+    %% Node Access Patterns
+    subgraph "Access Patterns"
+        HASH_ACCESS[Hash Map Access<br/>graph.nodes 'firstName'<br/>O-1 direct lookup<br/>No tree traversal needed]
+        
+        TREE_WALK[Tree Traversal<br/>Start at rootId<br/>Follow children arrays<br/>Recursive descent]
+        
+        PARENT_WALK[Parent Navigation<br/>node.parentId lookup<br/>Upward tree traversal<br/>Breadcrumb building]
+    end
+    
+    %% Connections - Tree Structure
+    ROOT --> PERSONAL
+    ROOT --> ACCOUNT
+    ROOT --> PREFS
+    
+    PERSONAL --> FNAME
+    PERSONAL --> LNAME
+    PERSONAL --> AGE
+    
+    ACCOUNT --> EMAIL
+    ACCOUNT --> PASSWORD
+    ACCOUNT --> CONFIRM
+    
+    PREFS --> NEWSLETTER
+    PREFS --> THEME
+    PREFS --> NOTIFICATIONS
+    
+    NOTIFICATIONS -.->|conditional children| EMAIL_FREQ
+    NOTIFICATIONS -.->|conditional children| SMS_ALERTS
+    
+    %% Access Pattern Connections
+    SG_INFO -.->|contains all nodes| HASH_ACCESS
+    ROOT -.->|entry point| TREE_WALK
+    EMAIL_FREQ -.->|parent chain| PARENT_WALK
+    
+    %% Dependency Connections
+    CONFIRM -.->|validates against| PASSWORD
+    EMAIL_FREQ -.->|depends on| NEWSLETTER
+    SMS_ALERTS -.->|depends on| NEWSLETTER
+    
+    %% Styling
+    classDef root fill:#1e3a8a,stroke:#60a5fa,stroke-width:4px,color:#e0e7ff,font-size:11px,font-weight:bold
+    classDef container fill:#065f46,stroke:#10b981,stroke-width:3px,color:#d1fae5,font-size:10px,font-weight:bold
+    classDef field fill:#7c2d12,stroke:#f97316,stroke-width:2px,color:#fed7aa,font-size:9px
+    classDef conditional fill:#581c87,stroke:#a855f7,stroke-width:2px,color:#e9d5ff,font-size:9px
+    classDef access fill:#1e40af,stroke:#3b82f6,stroke-width:2px,color:#dbeafe,font-size:9px
+    classDef info fill:#374151,stroke:#6b7280,stroke-width:1px,color:#f3f4f6,font-size:9px
+    
+    %% Apply Styles
+    class ROOT root
+    class PERSONAL,ACCOUNT,PREFS container
+    class FNAME,LNAME,AGE,EMAIL,PASSWORD,CONFIRM,NEWSLETTER,THEME field
+    class NOTIFICATIONS,EMAIL_FREQ,SMS_ALERTS conditional
+    class HASH_ACCESS,TREE_WALK,PARENT_WALK access
+    class SG_INFO info

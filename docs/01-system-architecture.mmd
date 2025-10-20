@@ -1,0 +1,70 @@
+%%{init: {"theme": "dark", "themeVariables": {"fontFamily": "Arial, sans-serif", "fontSize": "14px", "primaryColor": "#1a1a1a", "primaryTextColor": "#ffffff", "lineColor": "#90a4ae", "background": "#0d1117"}, "flowchart": {"nodeSpacing": 50, "rankSpacing": 80, "padding": 20}}}%%
+graph TB
+    %% User Interface Layer
+    subgraph "UI Layer"
+        A[Field Palette] -->|drag| B[Canvas]
+        B -->|select field| C[Field Config Panel]
+        D[Preview Panel] -->|preview form| E[RJSF Form]
+        F[Header] -->|controls| G[Layout Manager]
+    end
+    
+    %% State Management Layer
+    subgraph "State Management Layer"
+        H[Schema Graph Store<br/>Zustand]
+        I[Form Data Store<br/>Zustand] 
+        J[UI Schema Store<br/>Zustand]
+    end
+    
+    %% Core Business Logic Layer
+    subgraph "Core Engine Layer"
+        K[Schema Graph Engine<br/>Pure Business Logic]
+        L[Field Validators]
+        M[Graph Operations<br/>Add/Remove/Update/Move]
+        K --> L
+        K --> M
+    end
+    
+    %% Data Layer
+    subgraph "Data Structures"
+        N[Schema Graph<br/>Tree Structure]
+        O[Field Nodes<br/>Properties & Children]
+        P[JSON Schema<br/>RJSF Compatible]
+        Q[UI Schema<br/>Widget Settings]
+        R[Form Data<br/>Values & State]
+        N --> O
+    end
+    
+    %% External Dependencies
+    subgraph "External Libraries"
+        S[RJSF Core<br/>Form Rendering]
+        T[DND Kit<br/>Drag & Drop]
+        U[Zustand<br/>State Management]
+    end
+    
+    %% Flow Connections
+    A -.->|field selection| T
+    B -->|graph updates| H
+    C -->|field config| H
+    H -->|delegates to| K
+    H -->|updates| N
+    I -->|manages| R
+    J -->|manages| Q
+    K -->|converts| P
+    K -->|validates| N
+    D -->|consumes| P
+    D -->|consumes| Q
+    D -->|consumes| R
+    E -->|powered by| S
+    
+    %% Dark Mode Enhanced Styling
+    classDef uiLayer fill:#1e3a8a,stroke:#60a5fa,stroke-width:3px,color:#e0e7ff,font-size:14px,font-weight:bold
+    classDef stateLayer fill:#581c87,stroke:#c084fc,stroke-width:3px,color:#f3e8ff,font-size:14px,font-weight:bold
+    classDef engineLayer fill:#14532d,stroke:#4ade80,stroke-width:3px,color:#dcfce7,font-size:14px,font-weight:bold
+    classDef dataLayer fill:#9a3412,stroke:#fb923c,stroke-width:3px,color:#fed7aa,font-size:14px,font-weight:bold
+    classDef externalLayer fill:#be185d,stroke:#f472b6,stroke-width:3px,color:#fce7f3,font-size:14px,font-weight:bold
+    
+    class A,B,C,D,E,F,G uiLayer
+    class H,I,J stateLayer
+    class K,L,M engineLayer
+    class N,O,P,Q,R dataLayer
+    class S,T,U externalLayer
