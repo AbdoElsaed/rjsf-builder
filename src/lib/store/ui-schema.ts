@@ -1,4 +1,7 @@
 import { create } from 'zustand';
+import type { SchemaGraph } from '../graph/schema-graph';
+import { generateUiSchema } from '../ui-schema/ui-schema-generator';
+import { getWidgetRegistry } from '../widgets/widget-registry';
 
 // Define a simpler UI Schema type to avoid deep type instantiation
 export interface UiSchema {
@@ -12,7 +15,7 @@ export interface UiSchema {
     [key: string]: unknown;
 }
 
-type NestedUiSchema = {
+export type NestedUiSchema = {
     [key: string]: UiSchema | NestedUiSchema;
 };
 
@@ -21,6 +24,10 @@ interface UiSchemaState {
     updateUiSchema: (newSchema: Record<string, UiSchema>) => void;
     updateFieldUiSchema: (fieldPath: string, uiOptions: UiSchema) => void;
     removeFieldUiSchema: (fieldPath: string) => void;
+    // New methods for widget integration
+    regenerateFromGraph: (graph: SchemaGraph) => void;
+    assignWidget: (fieldPath: string, widgetId: string) => void;
+    getWidgetForField: (fieldPath: string) => string | null;
 }
 
 function createNestedObject(path: string[], value: UiSchema): NestedUiSchema {
@@ -110,4 +117,58 @@ export const useUiSchemaStore = create<UiSchemaState>((set) => ({
 
             return { uiSchema: newUiSchema };
         }),
+
+    regenerateFromGraph: (graph: SchemaGraph) =>
+        set(() => {
+            const newUiSchema = generateUiSchema(graph);
+            return { uiSchema: newUiSchema };
+        }),
+
+    assignWidget: (fieldPath: string, widgetId: string) =>
+        set((state) => {
+            const widgetRegistry = getWidgetRegistry();
+            const widget = widgetRegistry.getWidget(widgetId);
+            
+            if (!widget) {
+                console.warn(`Widget ${widgetId} not found`);
+                return state;
+            }
+
+            const uiOptions: UiSchema = {
+                'ui:widget': widgetId,
+                'ui:options': widget.defaultConfig,
+            };
+
+            // Use existing updateFieldUiSchema logic
+            const newUiSchema = { ...state.uiSchema };
+            const pathParts = fieldPath.split('.');
+            const nestedSchema = createNestedObject(pathParts, uiOptions);
+            const rootKey = pathParts[0];
+
+            if (newUiSchema[rootKey]) {
+                mergeUiSchemas(
+                    newUiSchema[rootKey] as NestedUiSchema,
+                    nestedSchema[rootKey] as NestedUiSchema
+                );
+            } else {
+                newUiSchema[rootKey] = nestedSchema[rootKey];
+            }
+
+            return { uiSchema: newUiSchema };
+        }),
+
+    getWidgetForField: (fieldPath: string): string | null => {
+        const state = useUiSchemaStore.getState();
+        const pathParts = fieldPath.split('.');
+        let current: NestedUiSchema | UiSchema = state.uiSchema;
+
+        for (const part of pathParts) {
+            if (!current[part] || typeof current[part] !== 'object') {
+                return null;
+            }
+            current = current[part] as NestedUiSchema | UiSchema;
+        }
+
+        return (current as UiSchema)['ui:widget'] || null;
+    },
 })); 

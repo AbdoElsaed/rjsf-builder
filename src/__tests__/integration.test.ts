@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { useSchemaGraphStore } from '../lib/store/schema-graph';
 import { useFormDataStore } from '../lib/store/form-data';
 import { useUiSchemaStore } from '../lib/store/ui-schema';
-import type { FieldNode } from '../lib/graph/schema-graph-engine';
+import type { FieldNode } from '../lib/store/schema-graph';
 import type { RJSFSchema } from '@rjsf/utils';
 
 describe('Integration Tests', () => {

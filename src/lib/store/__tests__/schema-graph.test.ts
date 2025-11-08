@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useSchemaGraphStore } from '../schema-graph';
-import type { FieldNode } from '../../graph/schema-graph-engine';
+import type { FieldNode } from '../schema-graph';
 import type { RJSFSchema } from '@rjsf/utils';
 
 describe('useSchemaGraphStore', () => {

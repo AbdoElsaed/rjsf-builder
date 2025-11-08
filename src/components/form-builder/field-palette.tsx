@@ -76,9 +76,9 @@ function DraggableFieldType({ item }: { item: FieldTypeItem }) {
         isDragging && "cursor-grabbing opacity-50"
       )}
     >
-      <div className="group rounded-md border bg-background px-3 py-2 hover:bg-accent hover:text-accent-foreground">
-        <div className="flex items-center gap-2">
-          <Icon className="h-4 w-4 text-muted-foreground group-hover:text-current" />
+      <div className="group rounded-lg border border-border/50 bg-card px-4 py-3.5 hover:bg-accent hover:text-accent-foreground hover:border-accent-foreground/20 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
+        <div className="flex items-center gap-3">
+          <Icon className="h-5 w-5 text-muted-foreground group-hover:text-current transition-colors duration-200" />
           <span className="text-sm font-medium">{item.label}</span>
         </div>
       </div>
@@ -88,7 +88,7 @@ function DraggableFieldType({ item }: { item: FieldTypeItem }) {
 
 export function FieldPalette() {
   return (
-    <div className="p-2 space-y-1">
+    <div className="space-y-2.5">
       {FIELD_TYPES.map((item) => (
         <DraggableFieldType key={item.id} item={item} />
       ))}

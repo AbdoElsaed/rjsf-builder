@@ -12,5 +12,10 @@ export interface FormNodeProps {
     isDragging?: boolean;
     draggedItem?: DraggedItem | null;
     activeDropZone?: string | null;
+    dropPreview?: {
+        targetId: string;
+        relationshipType: 'child' | 'then' | 'else';
+        canDrop: boolean;
+    } | null;
     onRemove?: () => void;
 } 

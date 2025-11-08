@@ -96,6 +96,25 @@ This folder contains comprehensive Mermaid diagrams that visualize the core arch
 - Access patterns and navigation examples
 - **Use Case**: Seeing a concrete example of how the schema graph looks in practice
 
+### 12. [Graph V2 Architecture](./12-graph-v2-architecture.mmd)
+**Overview**: Complete architecture of the new graph-based core engine (SchemaGraphV2)
+- Core data structure with indexed lookups (O-1 performance)
+- Node types (fields, definitions, refs, conditional groups)
+- Edge types (child, then, else, allOf, anyOf, oneOf, ref)
+- Core operations and their complexity
+- Definitions and references system
+- Conditional groups support
+- Helper functions for unified operations
+- **Use Case**: Understanding the new graph-based architecture and its performance benefits
+
+### 13. [Graph V2 Node Relationships](./13-graph-v2-node-relationships.mmd)
+**Overview**: Visual example of node relationships in SchemaGraphV2
+- Real example with root, fields, objects, definitions, references, and conditional groups
+- Edge types in action (child, then, else, ref)
+- Index structures showing O-1 lookup capabilities
+- Definitions registry visualization
+- **Use Case**: Understanding how nodes connect via edges and how indices enable fast lookups
+
 ### Bonus Files:
 - **[Dark Mode Test](./dark-mode-test.mmd)**: Simple test diagram for troubleshooting
 - **[Programming Guide](./README-programming.md)**: Detailed programming documentation

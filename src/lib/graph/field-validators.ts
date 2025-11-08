@@ -1,4 +1,4 @@
-import type { FieldNode, JSONSchemaType } from './schema-graph-engine';
+import type { FieldNode, JSONSchemaType } from '../store/schema-graph';
 
 /**
  * Field validation rules - easily extensible for new field types

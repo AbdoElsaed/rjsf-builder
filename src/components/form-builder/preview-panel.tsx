@@ -233,9 +233,9 @@ export function PreviewPanel({ showPreview }: PreviewPanelProps) {
 
   return (
     <ScrollArea className="h-full">
-      <div className="p-4 pt-16">
+      <div className="p-6 pt-20">
         {showPreview ? (
-          <div className="rounded-lg border bg-background p-4">
+          <div className="rounded-xl border border-border/50 bg-card shadow-sm p-6">
             <ThemeProvider theme={muiTheme}>
               <Form
                 schema={schema}
@@ -249,14 +249,14 @@ export function PreviewPanel({ showPreview }: PreviewPanelProps) {
           </div>
         ) : (
           <Tabs defaultValue="schema">
-            <TabsList className="mb-4">
+            <TabsList className="mb-4 bg-muted/50">
               <TabsTrigger value="schema">Schema</TabsTrigger>
               <TabsTrigger value="uiSchema">UI Schema</TabsTrigger>
               <TabsTrigger value="formData">Form Data</TabsTrigger>
             </TabsList>
             <TabsContent value="schema">
-              <div className="rounded-lg border bg-background overflow-hidden">
-                <div className="flex justify-end bg-muted/50 gap-1 p-1 border-b">
+              <div className="rounded-xl border border-border/50 bg-card overflow-hidden shadow-sm">
+                <div className="flex justify-end bg-muted/30 gap-1 p-2 border-b border-border/50">
                   {editMode ? (
                     <>
                       <Tooltip title="Cancel">
@@ -325,8 +325,8 @@ export function PreviewPanel({ showPreview }: PreviewPanelProps) {
               </div>
             </TabsContent>
             <TabsContent value="uiSchema">
-              <div className="rounded-lg border bg-background overflow-hidden">
-                <div className="flex justify-end bg-muted/50 gap-1 p-1 border-b">
+              <div className="rounded-xl border border-border/50 bg-card overflow-hidden shadow-sm">
+                <div className="flex justify-end bg-muted/30 gap-1 p-2 border-b border-border/50">
                   {uiSchemaEditMode ? (
                     <>
                       <Tooltip title="Cancel">
@@ -396,8 +396,8 @@ export function PreviewPanel({ showPreview }: PreviewPanelProps) {
               </div>
             </TabsContent>
             <TabsContent value="formData">
-              <div className="rounded-lg border bg-background overflow-hidden">
-                <div className="flex justify-end bg-muted/50 gap-1 p-1 border-b">
+              <div className="rounded-xl border border-border/50 bg-card overflow-hidden shadow-sm">
+                <div className="flex justify-end bg-muted/30 gap-1 p-2 border-b border-border/50">
                   {formDataEditMode ? (
                     <>
                       <Tooltip title="Cancel">

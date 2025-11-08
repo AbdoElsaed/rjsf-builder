@@ -4,12 +4,15 @@ import {
   type DragStartEvent,
   type DragOverEvent,
   closestCenter,
+  pointerWithin,
+  rectIntersection,
   MouseSensor,
   TouchSensor,
   useSensor,
   useSensors,
   DragOverlay,
 } from "@dnd-kit/core";
+import { arrayMove } from "@dnd-kit/sortable";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import {
@@ -17,14 +20,19 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
-import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
 import { Eye, Code } from "lucide-react";
 import { FieldPalette } from "./field-palette";
 import { Canvas } from "./canvas";
 import { PreviewPanel } from "./preview-panel";
 import { useSchemaGraphStore } from "@/lib/store/schema-graph";
-import type { SchemaGraph, JSONSchemaType } from "@/lib/store/schema-graph";
+import { ExpandProvider } from "./expand-context";
+import type { JSONSchemaType } from "@/lib/store/schema-graph";
+import { canDropNode, getDropTarget } from "@/lib/graph/drag-drop-helpers";
+import { getChildren } from "@/lib/graph/schema-graph";
+import type { SchemaNode } from "@/lib/graph/schema-graph";
+import { generateUniqueKey } from "@/lib/utils";
 
 interface DraggedItem {
   type: string;
@@ -33,13 +41,22 @@ interface DraggedItem {
   parentId?: string;
 }
 
-export function FormBuilderLayout() {
+interface FormBuilderLayoutProps {
+  showPreview?: boolean;
+}
+
+export function FormBuilderLayout({ showPreview = true }: FormBuilderLayoutProps) {
+  const [localShowPreview, setLocalShowPreview] = useState(showPreview ?? true);
   const [isDragging, setIsDragging] = useState(false);
   const [draggedItem, setDraggedItem] = useState<DraggedItem | null>(null);
   const [activeDropZone, setActiveDropZone] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
-  const { addNode, moveNode, reorderNode, graph, updateNode } =
+  const [dropPreview, setDropPreview] = useState<{
+    targetId: string;
+    relationshipType: 'child' | 'then' | 'else';
+    canDrop: boolean;
+  } | null>(null);
+  const { addNode, moveNode, reorderNode, graph, updateNode, getNode } =
     useSchemaGraphStore();
 
   // Initialize sensors
@@ -59,80 +76,103 @@ export function FormBuilderLayout() {
 
   const handleDragStart = (event: DragStartEvent) => {
     setIsDragging(true);
-    setDraggedItem((event.active.data.current as DraggedItem) || null);
+    const activeData = event.active.data.current as DraggedItem;
+    // If dragging an existing node, ensure nodeId is set for reorder detection
+    const draggedItemData: DraggedItem = activeData ? { ...activeData } : {};
+    if (typeof event.active.id === "string" && graph.nodes.has(event.active.id)) {
+      draggedItemData.nodeId = event.active.id;
+      if (!draggedItemData.type) {
+        const node = getNode(event.active.id);
+        draggedItemData.type = node?.type || '';
+        draggedItemData.label = node?.title || draggedItemData.label;
+      }
+    }
+    setDraggedItem(draggedItemData);
   };
 
   const handleDragOver = (event: DragOverEvent) => {
     const { over, active } = event;
-    const { engine } = useSchemaGraphStore.getState();
 
     // Clear active drop zone if not hovering over anything
     if (!over) {
       setActiveDropZone(null);
+      setDropPreview(null);
       return;
     }
 
     const overId = over.id;
     const activeData = active.data.current as DraggedItem;
 
-    // Handle dropping into then/else zones of IF blocks
-    if (
-      typeof overId === "string" &&
-      (overId.endsWith("_then") || overId.endsWith("_else"))
-    ) {
-      const [parentId] = overId.split("_");
-      const parentNode = graph.nodes[parentId];
-
-      // Only allow dropping fields into if block zones
-      if (parentNode.type === "if_block") {
-        setActiveDropZone(overId);
-      } else {
-        setActiveDropZone(null);
+    // PRIORITY 1: Check if this is a reorder operation (dragging existing node over sibling)
+    // This must be checked first to prioritize reordering over moving
+    if (typeof active.id === "string" && graph.nodes.has(active.id)) {
+      const activeNode = getNode(active.id);
+      const overNode = getNode(overId as string);
+      
+      if (activeNode && overNode && active.id !== overId) {
+        const activeParentId = graph.parentIndex.get(active.id);
+        const overParentId = graph.parentIndex.get(overId as string);
+        
+        // If both nodes have the same parent and it's a child relationship, it's a reorder
+        if (activeParentId && 
+            activeParentId === overParentId && 
+            activeParentId !== null) {
+          // Check if the edge type is 'child' (not then/else)
+          const activeEdge = Array.from(graph.edges.values()).find(
+            e => e.targetId === active.id && e.sourceId === activeParentId
+          );
+          
+          if (activeEdge?.type === 'child') {
+            // This is a reorder operation - highlight the sibling
+            setActiveDropZone(String(overId));
+            setDropPreview({
+              targetId: activeParentId,
+              relationshipType: 'child',
+              canDrop: true, // Reorder is always allowed for siblings
+            });
+            return;
+          }
+        }
       }
+    }
+
+    // PRIORITY 2: Handle move operations (different parent or new items)
+    // Parse the drop target
+    const dropTarget = getDropTarget(overId, graph);
+    if (!dropTarget) {
+      setActiveDropZone(null);
+      setDropPreview(null);
       return;
     }
 
-    const targetNodeId = typeof overId === "string" ? overId : undefined;
-    const targetNode = targetNodeId ? graph.nodes[targetNodeId] : null;
+    // Determine source ID/type
+    // For palette items, use the type directly from activeData
+    // For existing nodes, use the node ID
+    const sourceId = typeof active.id === "string" && graph.nodes.has(active.id)
+      ? active.id
+      : (activeData?.type || String(active.id)); // Use type for palette items, fallback to active.id as string
 
-    // If dragging an existing node, prevent dropping into itself or its descendants
-    if (typeof active.id === "string" && targetNodeId) {
-      const isValidMove = !engine.isDescendant(graph, active.id, targetNodeId);
-      if (!isValidMove) {
-        setActiveDropZone(null);
-        return;
-      }
-    }
-
-    // Check if we can drop this type into the target
-    const canDrop = canDropIntoParent(
-      activeData?.type || "",
-      targetNode?.type,
-      targetNodeId
+    // Check if drop is valid using unified helper
+    const canDrop = canDropNode(
+      graph,
+      sourceId as string | JSONSchemaType,
+      dropTarget.parentId,
+      dropTarget.relationshipType
     );
 
     setActiveDropZone(canDrop ? String(overId) : null);
-  };
-
-  const canDropIntoParent = (
-    childType: string,
-    parentType: string | undefined,
-    parentNodeId?: string
-  ) => {
-    const { engine, graph } = useSchemaGraphStore.getState();
-
-    // Don't allow dropping into non-container types (except if_block which is handled separately)
-    if (parentType && !["object", "array", "if_block"].includes(parentType)) {
-      return false;
-    }
-
-    return engine.canDropIntoParent(graph, childType, parentType, parentNodeId);
+    setDropPreview({
+      targetId: dropTarget.parentId,
+      relationshipType: dropTarget.relationshipType,
+      canDrop,
+    });
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     setIsDragging(false);
     setDraggedItem(null);
     setActiveDropZone(null);
+    setDropPreview(null);
 
     const { active, over } = event;
     if (!over) return;
@@ -145,224 +185,212 @@ export function FormBuilderLayout() {
 
     const activeData = active.data.current as DraggedItem;
 
-    // Handle dropping into then/else zones of IF blocks
-    if (
-      typeof overId === "string" &&
-      (overId.endsWith("_then") || overId.endsWith("_else"))
-    ) {
-      const [parentId, zone] = overId.split("_");
-      const parentNode = graph.nodes[parentId];
-
-      if (parentNode.type === "if_block") {
-        // If it's an existing node being moved
-        if (typeof activeId === "string" && graph.nodes[activeId]) {
-          const activeNode = graph.nodes[activeId];
-
-          // Remove from old parent first
-          if (activeNode.parentId) {
-            const oldParent = graph.nodes[activeNode.parentId];
-            if (oldParent.type === "if_block") {
-              // Remove from then/else arrays if present
-              updateNode(activeNode.parentId, {
-                ...oldParent,
-                then: oldParent.then?.filter((id) => id !== activeId),
-                else: oldParent.else?.filter((id) => id !== activeId),
-              });
-            } else {
-              // Remove from children array
-              updateNode(activeNode.parentId, {
-                ...oldParent,
-                children: oldParent.children?.filter((id) => id !== activeId),
-              });
-            }
-          }
-
-          // Add to new branch
-          const updates = {
-            ...parentNode,
-            [zone]: [...(parentNode[zone as "then" | "else"] || []), activeId],
-          };
-          updateNode(parentId, updates);
-        } else if (activeData?.type) {
-          // Create new node
-          const title = `New ${activeData.label}`;
-          const nodeData = {
-            type: activeData.type as JSONSchemaType,
-            title,
-            key: "",
-          };
-
-          // Add node directly to the if block's branch
-          const newNodeId = addNode(nodeData, "root");
-          if (newNodeId) {
-            const updates = {
-              ...parentNode,
-              [zone]: [
-                ...(parentNode[zone as "then" | "else"] || []),
-                newNodeId,
-              ],
-            };
-            updateNode(parentId, updates);
-
-            // Remove from root since it's now in the IF block
-            updateNode("root", {
-              ...graph.nodes.root,
-              children: graph.nodes.root.children?.filter(
-                (id) => id !== newNodeId
-              ),
-            });
-          }
-        }
-        return;
-      }
-    }
+    // Parse the drop target
+    const dropTarget = getDropTarget(overId, graph);
+    if (!dropTarget) return;
 
     // Case 1: Dropping a new field from the palette
-    if (activeData?.type && !graph.nodes[activeId as string]) {
-      // Get the actual parent ID (either from the over node or its parent)
-      const targetParentId = typeof overId === "string" ? overId : "root";
-      const targetNode = graph.nodes[targetParentId];
+    if (activeData?.type && !graph.nodes.has(String(activeId))) {
+      // Validate drop - pass the type directly for palette items
+      const canDrop = canDropNode(graph, activeData.type as JSONSchemaType, dropTarget.parentId, dropTarget.relationshipType);
+      if (!canDrop) return;
 
-      // Check if we can drop this type into the target parent
-      if (
-        !canDropIntoParent(
-          activeData.type as JSONSchemaType,
-          targetNode?.type,
-          targetParentId
-        )
-      ) {
-        return; // Invalid drop target
-      }
-
-      // Create a new node
+      // Create new node - V2 handles edge creation automatically
       const title = `New ${activeData.label}`;
-      addNode(
-        {
-          type: activeData.type as JSONSchemaType,
-          title,
-          key: "", // Engine will generate unique key
-        },
-        targetParentId
+      const parentId = dropTarget.relationshipType === 'child' ? dropTarget.parentId : 'root';
+      
+      // Generate a unique key from the title
+      const uniqueKey = generateUniqueKey(graph, title, parentId);
+      
+      // Initialize IF blocks with a default condition
+      const nodeData: Omit<SchemaNode, 'id'> = {
+        type: activeData.type as JSONSchemaType,
+        title,
+        key: uniqueKey,
+        ...(activeData.type === 'if_block' ? {
+          condition: {
+            field: '',
+            operator: 'equals',
+            value: '',
+          },
+        } : {}),
+      };
+      
+      const newNodeId = addNode(
+        nodeData,
+        parentId
       );
-    }
-    // Case 2: Reordering or moving existing fields
-    else if (typeof activeId === "string" && typeof overId === "string") {
-      const activeNode = graph.nodes[activeId];
-      const overNode = graph.nodes[overId];
 
-      // Prevent dropping a parent into its own child
-      const isValidMove = !isDescendant(activeId, overId, graph);
-      if (!isValidMove) return;
-
-      // If dropping onto an object or array, make it a child
-      if (
-        (overNode.type === "object" || overNode.type === "array") &&
-        canDropIntoParent(activeNode.type, overNode.type, overId)
-      ) {
-        // Remove from old parent first
-        if (activeNode.parentId) {
-          const oldParent = graph.nodes[activeNode.parentId];
-          if (oldParent.type === "if_block") {
-            // Remove from then/else arrays if present
-            updateNode(activeNode.parentId, {
-              ...oldParent,
-              then: oldParent.then?.filter((id) => id !== activeId),
-              else: oldParent.else?.filter((id) => id !== activeId),
-            });
-          } else {
-            // Remove from children array
-            updateNode(activeNode.parentId, {
-              ...oldParent,
-              children: oldParent.children?.filter((id) => id !== activeId),
+      // If dropping into IF block branch, use moveNode with correct edge type
+      if (dropTarget.relationshipType === 'then' || dropTarget.relationshipType === 'else') {
+        // Move with correct edge type - V2 handles edge creation automatically
+        moveNode(newNodeId, dropTarget.parentId, dropTarget.relationshipType);
+        
+        // Also update legacy then/else arrays for backward compatibility
+        const parentNode = getNode(dropTarget.parentId);
+        if (parentNode && parentNode.type === 'if_block') {
+          const branchArray = (parentNode[dropTarget.relationshipType] as string[] || []);
+          if (!branchArray.includes(newNodeId)) {
+            updateNode(dropTarget.parentId, {
+              ...parentNode,
+              [dropTarget.relationshipType]: [...branchArray, newNodeId],
             });
           }
         }
-
-        // Then move to new parent
-        moveNode(activeId, overId);
       }
-      // If they have the same parent, it's a reorder operation
-      else if (activeNode.parentId === overNode.parentId) {
-        const parent = activeNode.parentId
-          ? graph.nodes[activeNode.parentId]
-          : graph.nodes.root;
-        const oldIndex = parent.children?.indexOf(activeId) ?? -1;
-        const newIndex = parent.children?.indexOf(overId) ?? -1;
+      return;
+    }
 
-        if (oldIndex !== -1 && newIndex !== -1) {
-          reorderNode(activeId, newIndex);
+    // Case 2: Moving an existing node
+    if (typeof activeId === "string" && graph.nodes.has(activeId)) {
+      const activeNode = getNode(activeId);
+      if (!activeNode) return;
+
+      // Get parent ID from V2 graph
+      const parentId = graph.parentIndex.get(activeId);
+      const overNode = getNode(overId as string);
+      const overParentId = overNode ? graph.parentIndex.get(overId as string) : null;
+
+      // PRIORITY 1: Reorder operation (same parent, child relationship, dropping over sibling)
+      // This is the most common case and should be handled first
+      if (parentId && 
+          overNode &&
+          parentId === overParentId && 
+          parentId === dropTarget.parentId && 
+          dropTarget.relationshipType === 'child') {
+        // Verify it's a child relationship (not then/else)
+        const activeEdge = Array.from(graph.edges.values()).find(
+          e => e.targetId === activeId && e.sourceId === parentId
+        );
+        
+        if (activeEdge?.type === 'child') {
+          // This is a reorder within the same parent
+          const siblings = getChildren(graph, parentId, 'child');
+          const oldIndex = siblings.findIndex((n: SchemaNode) => n.id === activeId);
+          const newIndex = siblings.findIndex((n: SchemaNode) => n.id === overId);
+          
+          // Only reorder if indices are valid and different
+          if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+            reorderNode(activeId, newIndex);
+            return;
+          }
         }
       }
-      // If they have different parents, move to the new parent
-      else {
-        const targetParentId = overNode.parentId || "root";
-        if (
-          canDropIntoParent(
-            activeNode.type,
-            graph.nodes[targetParentId]?.type,
-            targetParentId
-          )
-        ) {
-          // Remove from old parent first
-          if (activeNode.parentId) {
-            const oldParent = graph.nodes[activeNode.parentId];
-            if (oldParent.type === "if_block") {
-              // Remove from then/else arrays if present
-              updateNode(activeNode.parentId, {
-                ...oldParent,
-                then: oldParent.then?.filter((id) => id !== activeId),
-                else: oldParent.else?.filter((id) => id !== activeId),
+      
+      // PRIORITY 2: Dropping on the parent itself (reorder to end)
+      if (parentId && 
+          dropTarget.parentId === parentId && 
+          dropTarget.relationshipType === 'child' &&
+          overId === parentId) {
+        // Verify it's a child relationship
+        const activeEdge = Array.from(graph.edges.values()).find(
+          e => e.targetId === activeId && e.sourceId === parentId
+        );
+        
+        if (activeEdge?.type === 'child') {
+          // Dropping on parent = move to end
+          const siblings = getChildren(graph, parentId, 'child');
+          const oldIndex = siblings.findIndex((n: SchemaNode) => n.id === activeId);
+          const newIndex = siblings.length - 1;
+          
+          if (oldIndex !== -1 && oldIndex !== newIndex) {
+            reorderNode(activeId, newIndex);
+            return;
+          }
+        }
+      }
+
+      // Validate drop
+      if (!canDropNode(graph, activeId, dropTarget.parentId, dropTarget.relationshipType)) {
+        return;
+      }
+
+      // Use store's moveNode which now supports edgeType
+      moveNode(activeId, dropTarget.parentId, dropTarget.relationshipType);
+      
+      // For IF block branches, also update legacy then/else arrays
+      // For conditional groups (allOf/anyOf/oneOf), sync all conditions to reference shared then/else
+      if (dropTarget.relationshipType === 'then' || dropTarget.relationshipType === 'else') {
+        const parentNode = getNode(dropTarget.parentId);
+        if (parentNode) {
+          if (parentNode.type === 'if_block') {
+            // Legacy if_block - update array
+            const branchArray = (parentNode[dropTarget.relationshipType] as string[] || []);
+            if (!branchArray.includes(activeId)) {
+              updateNode(dropTarget.parentId, {
+                ...parentNode,
+                [dropTarget.relationshipType]: [...branchArray, activeId],
               });
-            } else {
-              // Remove from children array
-              updateNode(activeNode.parentId, {
-                ...oldParent,
-                children: oldParent.children?.filter((id) => id !== activeId),
+            }
+          } else if (parentNode.type === 'allOf' || parentNode.type === 'anyOf' || parentNode.type === 'oneOf') {
+            // Conditional group - sync all conditions to reference shared then/else
+            const thenNodes = getChildren(graph, dropTarget.parentId, 'then');
+            const elseNodes = getChildren(graph, dropTarget.parentId, 'else');
+            const sharedThenId = thenNodes[0]?.id;
+            const sharedElseId = elseNodes[0]?.id;
+            
+            if (parentNode.conditions && parentNode.conditions.length > 0) {
+              const syncedConditions = parentNode.conditions.map(cond => ({
+                ...cond,
+                then: sharedThenId,
+                else: sharedElseId,
+              }));
+              
+              updateNode(dropTarget.parentId, {
+                ...parentNode,
+                conditions: syncedConditions,
               });
             }
           }
-
-          // Then move to new parent
-          moveNode(activeId, targetParentId);
         }
       }
     }
-  };
-
-  // Helper to check if nodeId is a descendant of targetId
-  const isDescendant = (
-    nodeId: string,
-    targetId: string,
-    graph: SchemaGraph
-  ): boolean => {
-    const { engine } = useSchemaGraphStore.getState();
-    return engine.isDescendant(graph, nodeId, targetId);
   };
 
   return (
-    <DndContext
-      sensors={sensors}
-      onDragStart={handleDragStart}
-      onDragOver={handleDragOver}
-      onDragEnd={handleDragEnd}
-      collisionDetection={closestCenter}
-    >
-      <div className="flex h-[calc(100vh-4.5rem)] items-center justify-center mt-1">
-        <div className="h-full w-full max-w-[1400px]">
+    <ExpandProvider>
+      <DndContext
+        sensors={sensors}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+        collisionDetection={(args) => {
+          // Use pointerWithin for better sortable detection, fallback to closestCenter
+          const pointerCollisions = pointerWithin(args);
+          if (pointerCollisions.length > 0) {
+            return pointerCollisions;
+          }
+          return closestCenter(args);
+        }}
+      >
+      <div className="flex h-[calc(100vh-5.2rem)] w-full px-4">
+        <div className="h-full w-full">
           <ResizablePanelGroup
             direction="horizontal"
-            className="h-full rounded-lg border"
+            className="h-full rounded-xl border border-border/50 bg-background shadow-lg"
           >
             {/* Field Palette */}
             <ResizablePanel
               defaultSize={20}
               minSize={15}
               maxSize={25}
-              className={cn("bg-muted/50", isDragging && "opacity-50")}
+              className={cn(
+                "bg-muted/30 backdrop-blur-sm transition-opacity duration-200",
+                isDragging && "opacity-60"
+              )}
             >
-              <div className="p-4 font-semibold">Field Types</div>
-              <ScrollArea className="h-[calc(100%-3.5rem)]">
-                <FieldPalette />
+              <div className="p-6 pb-4 border-b border-border/50">
+                <h2 className="text-base font-semibold text-foreground mb-1.5">
+                  Field Types
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  Drag to add fields
+                </p>
+              </div>
+              <ScrollArea className="h-[calc(100%-5rem)]">
+                <div className="p-3">
+                  <FieldPalette />
+                </div>
               </ScrollArea>
             </ResizablePanel>
 
@@ -372,7 +400,7 @@ export function FormBuilderLayout() {
             <ResizablePanel
               defaultSize={50}
               minSize={30}
-              className="border-l border-r"
+              className="bg-background"
             >
               <Canvas
                 onNodeSelect={setSelectedNodeId}
@@ -380,6 +408,7 @@ export function FormBuilderLayout() {
                 isDragging={isDragging}
                 draggedItem={draggedItem}
                 activeDropZone={activeDropZone}
+                dropPreview={dropPreview}
               />
             </ResizablePanel>
 
@@ -389,16 +418,16 @@ export function FormBuilderLayout() {
             <ResizablePanel
               defaultSize={30}
               minSize={25}
-              className="bg-muted/50 relative"
+              className="bg-muted/30 backdrop-blur-sm relative"
             >
               <div className="absolute right-4 top-4 z-10">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="gap-2"
-                  onClick={() => setShowPreview(!showPreview)}
+                  className="gap-2 shadow-sm hover:shadow-md transition-shadow"
+                  onClick={() => setLocalShowPreview(!localShowPreview)}
                 >
-                  {showPreview ? (
+                  {localShowPreview ? (
                     <>
                       <Code className="h-4 w-4" />
                       Show Schema
@@ -412,7 +441,7 @@ export function FormBuilderLayout() {
                 </Button>
               </div>
               <div className="h-full">
-                <PreviewPanel showPreview={showPreview} />
+                <PreviewPanel showPreview={localShowPreview} />
               </div>
             </ResizablePanel>
           </ResizablePanelGroup>
@@ -421,15 +450,34 @@ export function FormBuilderLayout() {
 
       <DragOverlay>
         {draggedItem && (
-          <div className="bg-background border rounded-lg p-2 shadow-lg opacity-90">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">
+          <div className={cn(
+            "bg-background border-2 rounded-xl p-4 shadow-2xl",
+            "transform rotate-2 scale-105 transition-all duration-200",
+            dropPreview?.canDrop 
+              ? "border-primary shadow-primary/30 ring-4 ring-primary/20" 
+              : dropPreview 
+                ? "border-destructive shadow-destructive/30 opacity-80"
+                : "border-muted shadow-lg"
+          )}>
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-semibold">
                 {draggedItem.label || draggedItem.type}
               </span>
+              {dropPreview && (
+                <span className={cn(
+                  "text-xs px-2.5 py-1 rounded-full font-medium transition-colors",
+                  dropPreview.canDrop 
+                    ? "bg-primary/15 text-primary border border-primary/20" 
+                    : "bg-destructive/15 text-destructive border border-destructive/20"
+                )}>
+                  {dropPreview.canDrop ? "✓ Can drop" : "✗ Cannot drop"}
+                </span>
+              )}
             </div>
           </div>
         )}
       </DragOverlay>
-    </DndContext>
+      </DndContext>
+    </ExpandProvider>
   );
 }

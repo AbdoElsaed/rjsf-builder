@@ -10,7 +10,7 @@ import type {
   ObjectFieldConfig,
   EnumFieldConfig,
 } from "@/lib/types/field-config";
-import type { FieldNode } from "@/lib/graph/schema-graph-engine";
+import type { FieldNode } from "@/lib/store/schema-graph";
 import type { RJSFSchema } from "@rjsf/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,7 +27,9 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
-import { getNodePath } from "@/lib/utils";
+import { getNodePath, titleToKey, generateUniqueKey } from "@/lib/utils";
+import { WidgetSelector } from "./widget-selector";
+import { getChildren } from "@/lib/graph/schema-graph";
 
 interface FieldConfigPanelProps {
   nodeId: string | null;
@@ -42,7 +44,7 @@ export function FieldConfigPanel({
   onSave,
   onCancel,
 }: FieldConfigPanelProps) {
-  const { graph, updateNode, compileToJsonSchema } = useSchemaGraphStore();
+  const { graph, updateNode, compileToJsonSchema, getNode } = useSchemaGraphStore();
   const { updateFieldUiSchema, removeFieldUiSchema } = useUiSchemaStore();
   const { migrateFormData } = useFormDataStore();
 
@@ -59,10 +61,12 @@ export function FieldConfigPanel({
   const [initialNode, setInitialNode] = useState<FieldNodeWithConfig | null>(
     null
   );
+  const [keyWasManuallyEdited, setKeyWasManuallyEdited] = useState(false);
 
   useEffect(() => {
-    if (nodeId && graph.nodes[nodeId]) {
-      const node = graph.nodes[nodeId] as FieldNodeWithConfig;
+    if (nodeId && graph.nodes.has(nodeId)) {
+      const node = graph.nodes.get(nodeId) as FieldNodeWithConfig | undefined;
+      if (!node) return;
       setInitialNode(node);
       setNodeConfig(node);
       setFormData({
@@ -71,10 +75,12 @@ export function FieldConfigPanel({
         key: node.key,
         required: node.required || false,
       });
+      // Reset manual edit flag when node changes
+      setKeyWasManuallyEdited(false);
     }
   }, [nodeId, graph.nodes]);
 
-  if (!nodeId || !graph.nodes[nodeId] || !nodeConfig) {
+  if (!nodeId || !graph.nodes.has(nodeId) || !nodeConfig) {
     return (
       <div className="p-4 text-sm text-muted-foreground">
         Select a field to configure
@@ -116,14 +122,13 @@ export function FieldConfigPanel({
     }
 
     // Check if the key is unique among siblings
-    const parent = nodeConfig.parentId
-      ? graph.nodes[nodeConfig.parentId]
-      : graph.nodes.root;
-    const siblings = parent.children || [];
+    const parentId = nodeConfig.parentId || 'root';
+    const parent = getNode(parentId);
+    const siblings = parent ? getChildren(graph, parentId, 'child').map(n => n.id) : [];
     const hasDuplicateKey = siblings.some((siblingId) => {
       if (siblingId === nodeId) return false; // Skip self
-      const sibling = graph.nodes[siblingId];
-      return sibling.key === formattedKey;
+      const sibling = getNode(siblingId);
+      return sibling?.key === formattedKey;
     });
 
     if (hasDuplicateKey) {
@@ -282,27 +287,12 @@ export function FieldConfigPanel({
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Widget</Label>
-            <Select
-              value={nodeConfig.ui?.["ui:widget"]}
-              onValueChange={(value) =>
-                handleUiConfigChange("ui:widget", value)
-              }
-            >
-              <SelectTrigger className="h-7 text-sm">
-                <SelectValue placeholder="Select widget" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="text">Text</SelectItem>
-                <SelectItem value="textarea">Textarea</SelectItem>
-                <SelectItem value="password">Password</SelectItem>
-                <SelectItem value="email">Email</SelectItem>
-                <SelectItem value="uri">URL</SelectItem>
-                <SelectItem value="data-url">Data URL</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <WidgetSelector
+            fieldType={nodeConfig.type}
+            value={nodeConfig.ui?.["ui:widget"]}
+            onValueChange={(value) => handleUiConfigChange("ui:widget", value)}
+            className="space-y-1.5"
+          />
         </div>
         <div className="grid grid-cols-3 gap-2">
           <div className="space-y-1.5">
@@ -398,23 +388,12 @@ export function FieldConfigPanel({
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Widget</Label>
-            <Select
-              value={nodeConfig.ui?.["ui:widget"]}
-              onValueChange={(value) =>
-                handleUiConfigChange("ui:widget", value)
-              }
-            >
-              <SelectTrigger className="h-7 text-sm">
-                <SelectValue placeholder="Select widget" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="updown">Up/Down</SelectItem>
-                <SelectItem value="range">Range</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <WidgetSelector
+            fieldType={nodeConfig.type}
+            value={nodeConfig.ui?.["ui:widget"]}
+            onValueChange={(value) => handleUiConfigChange("ui:widget", value)}
+            className="space-y-1.5"
+          />
         </div>
       </div>
     );
@@ -424,22 +403,12 @@ export function FieldConfigPanel({
     if (!isBooleanField(nodeConfig)) return null;
     return (
       <div className="space-y-2">
-        <div className="space-y-1.5">
-          <Label className="text-xs">Widget</Label>
-          <Select
-            value={nodeConfig.ui?.["ui:widget"]}
-            onValueChange={(value) => handleUiConfigChange("ui:widget", value)}
-          >
-            <SelectTrigger className="h-7 text-sm">
-              <SelectValue placeholder="Select widget" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="checkbox">Checkbox</SelectItem>
-              <SelectItem value="radio">Radio</SelectItem>
-              <SelectItem value="select">Select</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        <WidgetSelector
+          fieldType={nodeConfig.type}
+          value={nodeConfig.ui?.["ui:widget"]}
+          onValueChange={(value) => handleUiConfigChange("ui:widget", value)}
+          className="space-y-1.5"
+        />
       </div>
     );
   };
@@ -634,22 +603,12 @@ export function FieldConfigPanel({
             />
           </div>
         </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs">Widget</Label>
-          <Select
-            value={nodeConfig.ui?.["ui:widget"]}
-            onValueChange={(value) => handleUiConfigChange("ui:widget", value)}
-          >
-            <SelectTrigger className="h-7 text-sm">
-              <SelectValue placeholder="Select widget" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="select">Select</SelectItem>
-              <SelectItem value="radio">Radio</SelectItem>
-              <SelectItem value="checkboxes">Checkboxes</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        <WidgetSelector
+          fieldType={nodeConfig.type}
+          value={nodeConfig.ui?.["ui:widget"]}
+          onValueChange={(value) => handleUiConfigChange("ui:widget", value)}
+          className="space-y-1.5"
+        />
       </div>
     );
   };
@@ -683,9 +642,24 @@ export function FieldConfigPanel({
             <Label className="text-xs">Title</Label>
             <Input
               value={formData.title}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, title: e.target.value }))
-              }
+              onChange={(e) => {
+                const newTitle = e.target.value;
+                setFormData((prev) => {
+                  // Auto-generate key from title if key hasn't been manually edited
+                  // or if current key matches the auto-generated key from initial title
+                  const shouldAutoGenerate = !keyWasManuallyEdited || 
+                    (initialNode && prev.key === titleToKey(initialNode.title));
+                  
+                  if (shouldAutoGenerate && nodeConfig) {
+                    // Get parent ID from graph
+                    const parentId = graph.parentIndex.get(nodeId!) || 'root';
+                    const newKey = generateUniqueKey(graph, newTitle, parentId, nodeId!);
+                    return { ...prev, title: newTitle, key: newKey };
+                  }
+                  
+                  return { ...prev, title: newTitle };
+                });
+              }}
               placeholder="Field title"
               className="h-7 text-sm"
             />
@@ -694,9 +668,10 @@ export function FieldConfigPanel({
             <Label className="text-xs">Key</Label>
             <Input
               value={formData.key}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, key: e.target.value }))
-              }
+              onChange={(e) => {
+                setKeyWasManuallyEdited(true);
+                setFormData((prev) => ({ ...prev, key: e.target.value }));
+              }}
               placeholder="Field key"
               className="h-7 text-sm"
             />

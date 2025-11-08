@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { cn, getNodePath } from '../utils';
-import type { SchemaGraph } from '../graph/schema-graph-engine';
+import type { SchemaGraph } from '../store/schema-graph';
 
 describe('utils', () => {
   describe('cn', () => {

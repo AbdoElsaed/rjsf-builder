@@ -1,0 +1,523 @@
+import type { RJSFSchema } from "@rjsf/utils";
+import type { SchemaGraphV2, SchemaNode } from './schema-graph-v2';
+import { getChildren } from './schema-graph-v2';
+
+/**
+ * Compiles SchemaGraphV2 to JSON Schema format
+ * Handles definitions, $ref, allOf/anyOf/oneOf, and nested structures
+ */
+export function compileToJsonSchema(graph: SchemaGraphV2): RJSFSchema {
+  const compiled = compileNode(graph, graph.rootId);
+  
+  // Collect all definitions that are referenced
+  const referencedDefinitions = collectReferencedDefinitions(graph);
+  
+  // Build definitions section
+  if (referencedDefinitions.size > 0) {
+    const definitions: Record<string, RJSFSchema> = {};
+    
+    referencedDefinitions.forEach((definitionName) => {
+      const definitionNodeId = graph.definitions.get(definitionName);
+      if (definitionNodeId) {
+        const definitionNode = graph.nodes.get(definitionNodeId);
+        if (definitionNode) {
+          // Compile definition node (excluding definition metadata)
+          const defSchema = compileDefinitionNode(graph, definitionNode);
+          definitions[definitionName] = defSchema;
+        }
+      }
+    });
+    
+    return {
+      ...compiled,
+      definitions,
+    } as RJSFSchema;
+  }
+  
+  return compiled;
+}
+
+/**
+ * Compile a single node to JSON Schema
+ */
+function compileNode(graph: SchemaGraphV2, nodeId: string): RJSFSchema {
+  const node = graph.nodes.get(nodeId);
+  if (!node) {
+    throw new Error(`Node ${nodeId} not found`);
+  }
+  
+  // Handle reference nodes
+  if (node.type === 'ref') {
+    return compileRefNode(node);
+  }
+  
+  // Handle conditional groups
+  if (node.type === 'allOf' || node.type === 'anyOf' || node.type === 'oneOf') {
+    return compileConditionalGroup(graph, node);
+  }
+  
+  // Handle definition nodes (compile their content, not the definition wrapper)
+  if (node.type === 'definition') {
+    return compileDefinitionNode(graph, node);
+  }
+  
+  // Handle legacy IF blocks
+  if (node.type === 'if_block') {
+    return compileIfBlock(graph, node);
+  }
+  
+  // Regular field nodes
+  return compileFieldNode(graph, node);
+}
+
+/**
+ * Compile a reference node to $ref format
+ */
+function compileRefNode(node: SchemaNode): RJSFSchema {
+  if (!node.refTarget) {
+    throw new Error(`Reference node ${node.id} has no refTarget`);
+  }
+  
+  return {
+    $ref: `#/definitions/${node.refTarget}`,
+    title: node.title,
+    description: node.description,
+  } as RJSFSchema;
+}
+
+/**
+ * Compile a conditional group (allOf/anyOf/oneOf)
+ */
+function compileConditionalGroup(
+  graph: SchemaGraphV2,
+  node: SchemaNode
+): RJSFSchema {
+  if (node.type !== 'allOf' && node.type !== 'anyOf' && node.type !== 'oneOf') {
+    throw new Error(`Node ${node.id} is not a conditional group`);
+  }
+  
+  const conditions = node.conditions || [];
+  
+  if (conditions.length === 0) {
+    // Empty conditional group - return empty object schema
+    return {
+      type: 'object' as const,
+      properties: {},
+    };
+  }
+  
+  // Compile each condition block
+  const compiledConditions: RJSFSchema[] = conditions.map((condition) => {
+    const conditionSchema: RJSFSchema = {
+      if: compileCondition(condition.if),
+    };
+    
+    if (condition.then) {
+      const thenNode = graph.nodes.get(condition.then);
+      if (thenNode) {
+        // Check if then branch is a reference
+        if (thenNode.type === 'ref') {
+          conditionSchema.then = compileRefNode(thenNode);
+        } else {
+          // Compile the then branch node (which may contain children)
+          conditionSchema.then = compileNode(graph, condition.then);
+        }
+      }
+    }
+    
+    if (condition.else) {
+      const elseNode = graph.nodes.get(condition.else);
+      if (elseNode) {
+        // Check if else branch is a reference
+        if (elseNode.type === 'ref') {
+          conditionSchema.else = compileRefNode(elseNode);
+        } else {
+          // Compile the else branch node (which may contain children)
+          conditionSchema.else = compileNode(graph, condition.else);
+        }
+      }
+    }
+    
+    return conditionSchema;
+  });
+  
+  // Return as allOf/anyOf/oneOf
+  return {
+    [node.type]: compiledConditions,
+  } as RJSFSchema;
+}
+
+/**
+ * Compile a condition (if clause)
+ */
+function compileCondition(condition: { field: string; operator: string; value: unknown }): RJSFSchema {
+  const { field, operator, value } = condition;
+  
+  const createComparison = (op: string, val: unknown): RJSFSchema => {
+    const stringValue = String(val);
+    const numValue = Number(val);
+    
+    switch (op) {
+      case 'equals':
+        return { const: stringValue };
+      case 'not_equals':
+        return { not: { const: stringValue } };
+      case 'greater_than':
+        return {
+          type: 'number' as const,
+          exclusiveMinimum: numValue,
+        };
+      case 'less_than':
+        return {
+          type: 'number' as const,
+          exclusiveMaximum: numValue,
+        };
+      case 'greater_equal':
+        return {
+          type: 'number' as const,
+          minimum: numValue,
+        };
+      case 'less_equal':
+        return {
+          type: 'number' as const,
+          maximum: numValue,
+        };
+      case 'contains':
+        return {
+          type: 'string' as const,
+          pattern: `.*${stringValue}.*`,
+        };
+      case 'starts_with':
+        return {
+          type: 'string' as const,
+          pattern: `^${stringValue}.*`,
+        };
+      case 'ends_with':
+        return {
+          type: 'string' as const,
+          pattern: `.*${stringValue}$`,
+        };
+      case 'empty':
+        return {
+          oneOf: [
+            { type: 'string' as const, maxLength: 0 },
+            { type: 'null' as const },
+          ],
+        };
+      case 'not_empty':
+        return {
+          allOf: [
+            { type: 'string' as const },
+            { minLength: 1 },
+          ],
+        };
+      default:
+        return { const: stringValue };
+    }
+  };
+  
+  return {
+    properties: {
+      [field]: createComparison(operator, value),
+    },
+    required: [field],
+  };
+}
+
+/**
+ * Compile a definition node (its content, not the wrapper)
+ */
+function compileDefinitionNode(graph: SchemaGraphV2, node: SchemaNode): RJSFSchema {
+  // Definition nodes are just regular nodes marked as definitions
+  // Compile them as their actual type
+  if (node.type === 'definition') {
+    // Get the actual type from the node (it should have been preserved)
+    // For now, treat as object if it has children, otherwise infer from properties
+    const children = getChildren(graph, node.id, 'child');
+    
+    if (children.length > 0) {
+      // It's an object-like definition
+      return compileFieldNode(graph, { ...node, type: 'object' });
+    }
+    
+    // Infer type from node properties
+    if (node.enum) {
+      return compileFieldNode(graph, { ...node, type: 'enum' });
+    }
+    
+    // Default to object
+    return compileFieldNode(graph, { ...node, type: 'object' });
+  }
+  
+  return compileFieldNode(graph, node);
+}
+
+/**
+ * Compile legacy IF block
+ */
+function compileIfBlock(graph: SchemaGraphV2, node: SchemaNode): RJSFSchema {
+  // If no condition is set, return an empty object schema (don't throw)
+  // This allows IF blocks to be created and configured later
+  if (!node.condition) {
+    return {
+      type: 'object',
+      properties: {},
+    };
+  }
+  
+  const thenSchema: RJSFSchema = {
+    type: 'object' as const,
+    properties: {},
+  };
+  
+  const elseSchema: RJSFSchema | undefined = node.else?.length ? {
+    type: 'object' as const,
+    properties: {},
+  } : undefined;
+  
+  // Compile then branch
+  const thenRequired: string[] = [];
+  if (node.then?.length) {
+    node.then.forEach((childId) => {
+      const childNode = graph.nodes.get(childId);
+      if (childNode && thenSchema.properties) {
+        thenSchema.properties[childNode.key] = compileNode(graph, childId);
+        if (childNode.required) {
+          thenRequired.push(childNode.key);
+        }
+      }
+    });
+  }
+  if (thenRequired.length > 0) {
+    thenSchema.required = thenRequired;
+  }
+  
+  // Compile else branch
+  if (elseSchema && node.else?.length) {
+    const elseRequired: string[] = [];
+    node.else.forEach((childId) => {
+      const childNode = graph.nodes.get(childId);
+      if (childNode && elseSchema.properties) {
+        elseSchema.properties[childNode.key] = compileNode(graph, childId);
+        if (childNode.required) {
+          elseRequired.push(childNode.key);
+        }
+      }
+    });
+    if (elseRequired.length > 0) {
+      elseSchema.required = elseRequired;
+    }
+  }
+  
+  // Build the if condition
+  const ifCondition = compileCondition(node.condition);
+  
+  return {
+    if: ifCondition,
+    then: thenSchema,
+    ...(elseSchema ? { else: elseSchema } : {}),
+  };
+}
+
+/**
+ * Compile a regular field node
+ */
+function compileFieldNode(graph: SchemaGraphV2, node: SchemaNode): RJSFSchema {
+  const schema: RJSFSchema = {
+    type: getSchemaType(node.type),
+    title: node.title,
+  };
+  
+  if (node.description) {
+    schema.description = node.description;
+  }
+  
+  if (node.default !== undefined) {
+    // Cast to RJSFSchema compatible type
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    schema.default = node.default as any;
+  }
+  
+  // Handle enum
+  if (node.type === 'enum' && node.enum) {
+    schema.enum = node.enum;
+    if (node.enumNames) {
+      (schema as RJSFSchema).enumNames = node.enumNames;
+    }
+  }
+  
+  // Handle object with children
+  if (node.type === 'object') {
+    const children = getChildren(graph, node.id, 'child');
+    const nestedConditionals: RJSFSchema[] = [];
+    
+    if (children.length > 0) {
+      schema.properties = {};
+      schema.required = [];
+      
+      children.forEach((child) => {
+        const childSchema = compileNode(graph, child.id);
+        
+        // Check if child is a conditional group
+        if (child.type === 'allOf' || child.type === 'anyOf' || child.type === 'oneOf') {
+          // Conditional groups become allOf/anyOf/oneOf arrays at the parent level
+          // Extract the conditions from the compiled schema
+          if (child.type === 'allOf' && childSchema.allOf) {
+            nestedConditionals.push(...(childSchema.allOf as RJSFSchema[]));
+          } else if (child.type === 'anyOf' && childSchema.anyOf) {
+            nestedConditionals.push(...(childSchema.anyOf as RJSFSchema[]));
+          } else if (child.type === 'oneOf' && childSchema.oneOf) {
+            nestedConditionals.push(...(childSchema.oneOf as RJSFSchema[]));
+          } else {
+            // Fallback: wrap the entire conditional group
+            nestedConditionals.push(childSchema);
+          }
+        } else if (child.type === 'if_block') {
+          nestedConditionals.push(childSchema);
+        } else {
+          // Regular property - skip if key is empty (shouldn't happen with auto-generation, but safety check)
+          if (schema.properties && child.key && child.key.trim() !== '') {
+            schema.properties[child.key] = childSchema;
+            if (child.required) {
+              schema.required?.push(child.key);
+            }
+          }
+        }
+      });
+      
+      if (schema.required && schema.required.length === 0) {
+        delete schema.required;
+      }
+      
+      // Add nested conditionals using allOf
+      if (nestedConditionals.length > 0) {
+        schema.allOf = nestedConditionals;
+      }
+    }
+    
+    // Object-specific properties
+    if (node.minProperties !== undefined) {
+      schema.minProperties = node.minProperties;
+    }
+    if (node.maxProperties !== undefined) {
+      schema.maxProperties = node.maxProperties;
+    }
+    if (node.additionalProperties !== undefined) {
+      schema.additionalProperties = node.additionalProperties;
+    }
+  }
+  
+  // Handle array
+  if (node.type === 'array') {
+    const children = getChildren(graph, node.id, 'child');
+    if (children.length > 0) {
+      schema.items = compileNode(graph, children[0].id);
+    }
+    
+    // Array-specific properties
+    if (node.minItems !== undefined) {
+      schema.minItems = node.minItems;
+    }
+    if (node.maxItems !== undefined) {
+      schema.maxItems = node.maxItems;
+    }
+    if (node.uniqueItems !== undefined) {
+      schema.uniqueItems = node.uniqueItems;
+    }
+    if (node.additionalItems !== undefined) {
+      schema.additionalItems = node.additionalItems;
+    }
+  }
+  
+  // Handle string properties
+  if (node.type === 'string' || node.type === 'enum') {
+    if (node.minLength !== undefined) {
+      schema.minLength = node.minLength;
+    }
+    if (node.maxLength !== undefined) {
+      schema.maxLength = node.maxLength;
+    }
+    if (node.pattern) {
+      schema.pattern = node.pattern;
+    }
+    if (node.format) {
+      schema.format = node.format;
+    }
+  }
+  
+  // Handle number properties
+  if (node.type === 'number') {
+    if (node.minimum !== undefined) {
+      schema.minimum = node.minimum;
+    }
+    if (node.maximum !== undefined) {
+      schema.maximum = node.maximum;
+    }
+    if (node.multipleOf !== undefined) {
+      schema.multipleOf = node.multipleOf;
+    }
+    if (node.exclusiveMinimum !== undefined) {
+      schema.exclusiveMinimum = node.exclusiveMinimum;
+    }
+    if (node.exclusiveMaximum !== undefined) {
+      schema.exclusiveMaximum = node.exclusiveMaximum;
+    }
+  }
+  
+  return schema;
+}
+
+/**
+ * Convert internal type to JSON Schema type
+ */
+function getSchemaType(type: string): 'string' | 'number' | 'boolean' | 'object' | 'array' {
+  switch (type) {
+    case 'enum':
+    case 'string':
+      return 'string';
+    case 'if_block':
+    case 'definition':
+      return 'object';
+    case 'allOf':
+    case 'anyOf':
+    case 'oneOf':
+      return 'object';
+    default:
+      return type as 'string' | 'number' | 'boolean' | 'object' | 'array';
+  }
+}
+
+/**
+ * Collect all definition names that are referenced in the graph
+ */
+function collectReferencedDefinitions(graph: SchemaGraphV2): Set<string> {
+  const referenced = new Set<string>();
+  
+  // Traverse all nodes and find references
+  graph.nodes.forEach((node) => {
+    if (node.type === 'ref' && node.refTarget) {
+      referenced.add(node.refTarget);
+    }
+    
+    // Also check conditional groups for references in then/else
+    if (node.conditions) {
+      node.conditions.forEach((condition) => {
+        if (condition.then) {
+          const thenNode = graph.nodes.get(condition.then);
+          if (thenNode?.type === 'ref' && thenNode.refTarget) {
+            referenced.add(thenNode.refTarget);
+          }
+        }
+        if (condition.else) {
+          const elseNode = graph.nodes.get(condition.else);
+          if (elseNode?.type === 'ref' && elseNode.refTarget) {
+            referenced.add(elseNode.refTarget);
+          }
+        }
+      });
+    }
+  });
+  
+  return referenced;
+}
+

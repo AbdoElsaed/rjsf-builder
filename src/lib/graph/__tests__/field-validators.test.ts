@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { FieldValidators, FieldCompatibility } from '../field-validators';
-import type { FieldNode } from '../schema-graph-engine';
+import type { FieldNode } from '../../store/schema-graph';
 
 describe('FieldValidators', () => {
   describe('validateField', () => {

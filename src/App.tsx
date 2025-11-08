@@ -11,7 +11,7 @@ function App() {
     <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
       <div className="flex h-screen flex-col bg-background">
         <Header />
-        <main className="flex-1">
+        <main className="flex-1 pt-4">
           <FormBuilderLayout />
         </main>
         <Toaster

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { getDefaultConfig } from '../field-config';
-import type { JSONSchemaType } from '../../graph/schema-graph-engine';
+import type { JSONSchemaType } from '../../store/schema-graph';
 
 describe('field-config', () => {
   describe('getDefaultConfig', () => {

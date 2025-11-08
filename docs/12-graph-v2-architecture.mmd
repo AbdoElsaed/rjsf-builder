@@ -1,0 +1,223 @@
+%%{init: {"theme": "dark", "themeVariables": {"fontFamily": "Arial, sans-serif", "fontSize": "12px", "primaryColor": "#1a1a1a", "primaryTextColor": "#ffffff", "lineColor": "#90a4ae", "background": "#0d1117"}, "flowchart": {"nodeSpacing": 50, "rankSpacing": 80, "padding": 25}}}%%
+graph TB
+    %% Core Graph Structure
+    subgraph "SchemaGraphV2 Core Structure"
+        SG[SchemaGraphV2<br/>Main Graph Container]
+        
+        subgraph "Data Storage"
+            NODES[nodes: Map&lt;string, SchemaNode&gt;<br/>O-1 Lookups]
+            EDGES[edges: Map&lt;string, GraphEdge&gt;<br/>All Relationships]
+            DEFS[definitions: Map&lt;string, string&gt;<br/>definitionName → nodeId]
+            ROOT[rootId: string<br/>Root Node Reference]
+        end
+        
+        subgraph "Performance Indices - O-1 Lookups"
+            PARENT_IDX[parentIndex: Map&lt;string, string&gt;<br/>childId → parentId]
+            CHILD_IDX[childrenIndex: Map&lt;string, Set&lt;string&gt;&gt;<br/>parentId → Set&lt;childIds&gt;]
+            EDGE_TYPE_IDX[edgeTypeIndex: Map&lt;EdgeType, Set&lt;string&gt;&gt;<br/>edgeType → Set&lt;edgeIds&gt;]
+        end
+        
+        SG --> NODES
+        SG --> EDGES
+        SG --> DEFS
+        SG --> ROOT
+        SG --> PARENT_IDX
+        SG --> CHILD_IDX
+        SG --> EDGE_TYPE_IDX
+    end
+    
+    %% Node Types
+    subgraph "SchemaNode Types"
+        SN[SchemaNode<br/>Base Interface]
+        
+        subgraph "Field Types"
+            STR[string<br/>Text Input]
+            NUM[number<br/>Numeric Input]
+            BOOL[boolean<br/>Checkbox/Toggle]
+            OBJ[object<br/>Container]
+            ARR[array<br/>List]
+            ENUM[enum<br/>Dropdown/Radio]
+        end
+        
+        subgraph "Internal Types"
+            DEF_NODE[definition<br/>Reusable Component]
+            REF_NODE[ref<br/>Reference to Definition]
+            ALLOF[allOf<br/>Conditional Group]
+            ANYOF[anyOf<br/>Conditional Group]
+            ONEOF[oneOf<br/>Conditional Group]
+            IF_BLOCK[if_block<br/>Legacy IF Block]
+        end
+        
+        SN --> STR
+        SN --> NUM
+        SN --> BOOL
+        SN --> OBJ
+        SN --> ARR
+        SN --> ENUM
+        SN --> DEF_NODE
+        SN --> REF_NODE
+        SN --> ALLOF
+        SN --> ANYOF
+        SN --> ONEOF
+        SN --> IF_BLOCK
+        
+        NODES -.contains.-> SN
+    end
+    
+    %% Edge Types
+    subgraph "GraphEdge Types - Relationship System"
+        GE[GraphEdge<br/>Relationship Container]
+        
+        CHILD_EDGE[child<br/>Parent-Child Relationship]
+        THEN_EDGE[then<br/>IF/AllOf Then Branch]
+        ELSE_EDGE[else<br/>IF/AllOf Else Branch]
+        ALOF_EDGE[allOf<br/>AllOf Condition]
+        ANOF_EDGE[anyOf<br/>AnyOf Condition]
+        ONOF_EDGE[oneOf<br/>OneOf Condition]
+        REF_EDGE[ref<br/>Reference Link]
+        
+        GE --> CHILD_EDGE
+        GE --> THEN_EDGE
+        GE --> ELSE_EDGE
+        GE --> ALOF_EDGE
+        GE --> ANOF_EDGE
+        GE --> ONOF_EDGE
+        GE --> REF_EDGE
+        
+        EDGES -.contains.-> GE
+    end
+    
+    %% Core Operations
+    subgraph "Core Graph Operations - O-1 Complexity"
+        CO[Core Operations]
+        
+        ADD_NODE[addNode<br/>O-1 Map Insertion]
+        REMOVE_NODE[removeNode<br/>O-k where k = degree]
+        ADD_EDGE[addEdge<br/>O-1 Index Updates]
+        REMOVE_EDGE[removeEdge<br/>O-1 Index Updates]
+        UPDATE_NODE[updateNode<br/>O-1 Map Update]
+        MOVE_NODE[moveNode<br/>O-1 Index Updates]
+        REORDER_NODE[reorderNode<br/>O-k Edge Updates]
+        
+        CO --> ADD_NODE
+        CO --> REMOVE_NODE
+        CO --> ADD_EDGE
+        CO --> REMOVE_EDGE
+        CO --> UPDATE_NODE
+        CO --> MOVE_NODE
+        CO --> REORDER_NODE
+        
+        ADD_NODE -.operates on.-> SG
+        REMOVE_NODE -.operates on.-> SG
+        ADD_EDGE -.operates on.-> SG
+        UPDATE_NODE -.operates on.-> SG
+        MOVE_NODE -.operates on.-> SG
+    end
+    
+    %% Lookup Operations
+    subgraph "Lookup Operations - O-1 Queries"
+        LO[Lookup Operations]
+        
+        GET_PARENT[getParent<br/>O-1 parentIndex]
+        GET_CHILDREN[getChildren<br/>O-1 childrenIndex]
+        GET_EDGES[getEdgesByType<br/>O-1 edgeTypeIndex]
+        IS_DESC[isDescendant<br/>O-depth traversal]
+        
+        LO --> GET_PARENT
+        LO --> GET_CHILDREN
+        LO --> GET_EDGES
+        LO --> IS_DESC
+        
+        GET_PARENT -.uses.-> PARENT_IDX
+        GET_CHILDREN -.uses.-> CHILD_IDX
+        GET_EDGES -.uses.-> EDGE_TYPE_IDX
+    end
+    
+    %% Definitions System
+    subgraph "Definitions & References System"
+        DS[Definitions System]
+        
+        CREATE_DEF[createDefinition<br/>Create Reusable Component]
+        CREATE_REF[createRefToDefinition<br/>Create Reference Node]
+        RESOLVE_REF[resolveRef<br/>Get Definition from Ref]
+        GET_DEFS[getDefinitions<br/>List All Definitions]
+        DELETE_DEF[deleteDefinition<br/>Remove Definition]
+        
+        DS --> CREATE_DEF
+        DS --> CREATE_REF
+        DS --> RESOLVE_REF
+        DS --> GET_DEFS
+        DS --> DELETE_DEF
+        
+        CREATE_DEF -.manages.-> DEFS
+        CREATE_REF -.creates.-> REF_NODE
+        RESOLVE_REF -.resolves.-> DEF_NODE
+        REF_NODE -.points to.-> DEF_NODE
+        REF_EDGE -.links.-> REF_NODE
+    end
+    
+    %% Conditional Groups
+    subgraph "Conditional Groups System"
+        CG[Conditional Groups]
+        
+        CREATE_GROUP[createConditionalGroup<br/>allOf/anyOf/oneOf]
+        ADD_CONDITION[addConditionToGroup<br/>Add if/then/else Block]
+        GET_CONDITIONS[getGroupConditions<br/>Get All Conditions]
+        GET_THEN[getThenBranch<br/>Get Then Nodes]
+        GET_ELSE[getElseBranch<br/>Get Else Nodes]
+        
+        CG --> CREATE_GROUP
+        CG --> ADD_CONDITION
+        CG --> GET_CONDITIONS
+        CG --> GET_THEN
+        CG --> GET_ELSE
+        
+        CREATE_GROUP -.creates.-> ALLOF
+        CREATE_GROUP -.creates.-> ANYOF
+        CREATE_GROUP -.creates.-> ONEOF
+        ADD_CONDITION -.adds.-> THEN_EDGE
+        ADD_CONDITION -.adds.-> ELSE_EDGE
+    end
+    
+    %% Helper Functions
+    subgraph "Helper Functions"
+        HF[Helper Functions]
+        
+        ADD_REL[addRelationship<br/>Unified Relationship Handler]
+        CAN_DROP[canDrop<br/>Drop Validation]
+        CLONE[cloneGraph<br/>Immutable Copy]
+        
+        HF --> ADD_REL
+        HF --> CAN_DROP
+        HF --> CLONE
+        
+        ADD_REL -.unifies.-> GE
+        CAN_DROP -.validates.-> IS_DESC
+    end
+    
+    %% Data Flow
+    subgraph "Data Flow Examples"
+        DF[Data Flow]
+        
+        EXAMPLE1[Example: Add Field<br/>addNode → addEdge → Update Indices]
+        EXAMPLE2[Example: Reference Definition<br/>createRefToDefinition → Link via ref Edge]
+        EXAMPLE3[Example: Conditional Logic<br/>createConditionalGroup → Add Conditions → Link Branches]
+        
+        DF --> EXAMPLE1
+        DF --> EXAMPLE2
+        DF --> EXAMPLE3
+    end
+    
+    %% Styling
+    classDef coreStruct fill:#1e3a8a,stroke:#60a5fa,stroke-width:3px,color:#fff
+    classDef nodeType fill:#14532d,stroke:#4ade80,stroke-width:2px,color:#fff
+    classDef edgeType fill:#581c87,stroke:#c084fc,stroke-width:2px,color:#fff
+    classDef operation fill:#9a3412,stroke:#fb923c,stroke-width:2px,color:#fff
+    classDef system fill:#991b1b,stroke:#f87171,stroke-width:2px,color:#fff
+    
+    class SG,NODES,EDGES,DEFS,ROOT,PARENT_IDX,CHILD_IDX,EDGE_TYPE_IDX coreStruct
+    class SN,STR,NUM,BOOL,OBJ,ARR,ENUM,DEF_NODE,REF_NODE,ALLOF,ANYOF,ONEOF,IF_BLOCK nodeType
+    class GE,CHILD_EDGE,THEN_EDGE,ELSE_EDGE,ALOF_EDGE,ANOF_EDGE,ONOF_EDGE,REF_EDGE edgeType
+    class CO,ADD_NODE,REMOVE_NODE,ADD_EDGE,REMOVE_EDGE,UPDATE_NODE,MOVE_NODE,REORDER_NODE,LO,GET_PARENT,GET_CHILDREN,GET_EDGES,IS_DESC operation
+    class DS,CREATE_DEF,CREATE_REF,RESOLVE_REF,GET_DEFS,DELETE_DEF,CG,CREATE_GROUP,ADD_CONDITION,GET_CONDITIONS,GET_THEN,GET_ELSE,HF,ADD_REL,CAN_DROP,CLONE system
+
