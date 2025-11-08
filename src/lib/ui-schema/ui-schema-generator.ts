@@ -5,17 +5,28 @@ import { getWidgetRegistry, type CustomWidget } from '../widgets/widget-registry
 import { compileToJsonSchema } from '../graph/schema-compiler';
 import type { RJSFSchema } from '@rjsf/utils';
 
+// UI Schema generation cache to avoid regenerating unchanged graphs
+const uiSchemaCache = new WeakMap<SchemaGraph, NestedUiSchema>();
+
 /**
  * Generate UI schema from a SchemaGraph
  * Automatically assigns widgets based on field types and auto-mapping rules
  * 
  * CRITICAL: ui:order is generated from the ACTUAL compiled JSON schema,
  * not from the graph structure, to ensure perfect matching
+ * 
+ * Optimized: Uses WeakMap cache to avoid regenerating unchanged graphs
  */
 export function generateUiSchema(
   graph: SchemaGraph,
   widgetRegistry = getWidgetRegistry()
 ): NestedUiSchema {
+  // Check cache first
+  const cached = uiSchemaCache.get(graph);
+  if (cached) {
+    return cached;
+  }
+  
   const uiSchema: NestedUiSchema = {};
   
   // Start from root and traverse the graph
@@ -32,6 +43,9 @@ export function generateUiSchema(
   // it MUST be in ui:order, and vice versa
   const compiledSchema = compileToJsonSchema(graph);
   ensureOrderMatchesCompiledSchema(uiSchema, compiledSchema);
+
+  // Cache the result
+  uiSchemaCache.set(graph, uiSchema);
 
   return uiSchema;
 }

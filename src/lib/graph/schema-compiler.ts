@@ -2,6 +2,9 @@ import type { RJSFSchema } from "@rjsf/utils";
 import type { SchemaGraph, SchemaNode } from './schema-graph';
 import { getChildren } from './schema-graph';
 
+// Compilation cache to avoid recompiling unchanged graphs
+const compilationCache = new WeakMap<SchemaGraph, RJSFSchema>();
+
 function cloneSchema(schema?: RJSFSchema): RJSFSchema | undefined {
   if (!schema) {
     return undefined;
@@ -54,14 +57,22 @@ function normalizeBranchSchema(
 /**
  * Compiles SchemaGraph to JSON Schema format
  * Handles definitions, $ref, allOf/anyOf/oneOf, and nested structures
+ * Optimized: Uses WeakMap cache to avoid recompiling unchanged graphs
  */
 export function compileToJsonSchema(graph: SchemaGraph): RJSFSchema {
+  // Check cache first
+  const cached = compilationCache.get(graph);
+  if (cached) {
+    return cached;
+  }
+  
   const compiled = compileNode(graph, graph.rootId);
   
   // Collect all definitions that are referenced
   const referencedDefinitions = collectReferencedDefinitions(graph);
   
   // Build definitions section
+  let result: RJSFSchema;
   if (referencedDefinitions.size > 0) {
     const definitions: Record<string, RJSFSchema> = {};
     
@@ -77,13 +88,18 @@ export function compileToJsonSchema(graph: SchemaGraph): RJSFSchema {
       }
     });
     
-    return {
+    result = {
       ...compiled,
       definitions,
     } as RJSFSchema;
+  } else {
+    result = compiled;
   }
   
-  return compiled;
+  // Cache the result
+  compilationCache.set(graph, result);
+  
+  return result;
 }
 
 /**

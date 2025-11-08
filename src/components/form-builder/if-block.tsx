@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { X, Plus } from "lucide-react";
 import type { DraggedItem } from "./types";
-import { useMemo, useEffect, useCallback } from "react";
+import { useMemo, useEffect, useCallback, memo } from "react";
 import type { ConditionalLogic, ConditionalBlock } from "@/lib/graph/schema-graph";
 
 interface IfBlockProps {
@@ -77,7 +77,7 @@ const isValidCondition = (condition: ConditionalLogic | undefined): boolean => {
   );
 };
 
-export function IfBlock({
+const IfBlockComponent = function IfBlock({
   nodeId,
   isDragging = false,
   draggedItem,
@@ -859,4 +859,17 @@ export function IfBlock({
       </div>
     </div>
   );
-}
+};
+
+// Memoize IfBlock to prevent unnecessary re-renders
+export const IfBlock = memo(IfBlockComponent, (prevProps, nextProps) => {
+  return (
+    prevProps.nodeId === nextProps.nodeId &&
+    prevProps.isDragging === nextProps.isDragging &&
+    prevProps.activeDropZone === nextProps.activeDropZone &&
+    prevProps.draggedItem?.type === nextProps.draggedItem?.type &&
+    prevProps.dropPreview?.targetId === nextProps.dropPreview?.targetId &&
+    prevProps.dropPreview?.relationshipType === nextProps.dropPreview?.relationshipType &&
+    prevProps.dropPreview?.canDrop === nextProps.dropPreview?.canDrop
+  );
+});

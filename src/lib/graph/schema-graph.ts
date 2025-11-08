@@ -439,6 +439,7 @@ export function isDescendant(
 }
 
 // Update a node's properties
+// Optimized: Only clone if node actually changes
 export function updateNode(
   graph: SchemaGraph,
   nodeId: string,
@@ -447,6 +448,20 @@ export function updateNode(
   const node = graph.nodes.get(nodeId);
   if (!node) {
     throw new Error(`Node ${nodeId} does not exist`);
+  }
+  
+  // Check if updates actually change anything (shallow comparison)
+  let hasChanges = false;
+  for (const key in updates) {
+    if (node[key as keyof SchemaNode] !== updates[key as keyof Partial<SchemaNode>]) {
+      hasChanges = true;
+      break;
+    }
+  }
+  
+  // If no changes, return original graph (avoid unnecessary cloning)
+  if (!hasChanges) {
+    return graph;
   }
   
   const newGraph = cloneGraph(graph);

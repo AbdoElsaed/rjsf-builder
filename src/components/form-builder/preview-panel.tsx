@@ -11,7 +11,7 @@ import { Theme as RJSFShadcnTheme } from "@rjsf/shadcn";
 import type { RJSFSchema } from "@rjsf/utils";
 import type { IChangeEvent } from "@rjsf/core";
 import { useTheme } from "@/components/theme-provider";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { toast } from "sonner";
 import { Pencil, X, Check, Copy } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -24,19 +24,23 @@ interface PreviewPanelProps {
 }
 
 export function PreviewPanel({ showPreview }: PreviewPanelProps) {
-  const { compileToJsonSchema, setSchemaFromJson } = useSchemaGraphStore();
+  const { compileToJsonSchema, setSchemaFromJson, graph } = useSchemaGraphStore();
   const { formData, updateFormData, migrateFormData } = useFormDataStore();
   const { uiSchema, updateUiSchema } = useUiSchemaStore();
   const { theme: colorMode } = useTheme();
 
-  // Handle compilation errors gracefully
-  let schema: RJSFSchema;
-  try {
-    schema = compileToJsonSchema() as RJSFSchema;
-  } catch (error) {
-    console.error('Schema compilation error:', error);
-    schema = { type: 'object', properties: {} } as RJSFSchema;
-  }
+  // Memoize schema compilation - only recompile when graph actually changes
+  // Note: compileToJsonSchema uses WeakMap cache internally for performance
+  const schema = useMemo(() => {
+    try {
+      return compileToJsonSchema() as RJSFSchema;
+    } catch (error) {
+      console.error('Schema compilation error:', error);
+      return { type: 'object', properties: {} } as RJSFSchema;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graph]);
+  
   const previousSchema = useRef<RJSFSchema>(schema);
   const [editMode, setEditMode] = useState(false);
   const [editedSchema, setEditedSchema] = useState(

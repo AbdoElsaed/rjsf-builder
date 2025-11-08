@@ -15,7 +15,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, memo } from "react";
 import {
   useSchemaGraphStore,
 } from "@/lib/store/schema-graph";
@@ -81,7 +81,7 @@ const calculateDepth = (graph: SchemaGraph, nodeId: string): number => {
   return depth;
 };
 
-export function FormNode({
+const FormNodeComponent = function FormNode({
   nodeId,
   selectedNodeId,
   onSelect,
@@ -770,4 +770,20 @@ export function FormNode({
       )}
     </>
   );
-}
+};
+
+// Memoize FormNode to prevent unnecessary re-renders
+// Only re-render if props actually change
+export const FormNode = memo(FormNodeComponent, (prevProps, nextProps) => {
+  // Re-render if these props change
+  return (
+    prevProps.nodeId === nextProps.nodeId &&
+    prevProps.selectedNodeId === nextProps.selectedNodeId &&
+    prevProps.isDragging === nextProps.isDragging &&
+    prevProps.activeDropZone === nextProps.activeDropZone &&
+    prevProps.draggedItem?.type === nextProps.draggedItem?.type &&
+    prevProps.dropPreview?.targetId === nextProps.dropPreview?.targetId &&
+    prevProps.dropPreview?.relationshipType === nextProps.dropPreview?.relationshipType &&
+    prevProps.dropPreview?.canDrop === nextProps.dropPreview?.canDrop
+  );
+});

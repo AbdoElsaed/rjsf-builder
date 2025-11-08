@@ -13,8 +13,22 @@ import {
 } from '../graph/schema-graph';
 import { fromJsonSchema } from '../graph/schema-importer';
 import { compileToJsonSchema } from '../graph/schema-compiler';
-import { generateUiSchema } from '../ui-schema/ui-schema-generator';
 import { useUiSchemaStore } from './ui-schema';
+
+// Debounce UI schema regeneration to batch updates
+let uiSchemaRegenerationTimer: ReturnType<typeof setTimeout> | null = null;
+const DEBOUNCE_DELAY = 100; // 100ms debounce
+
+function scheduleUiSchemaRegeneration(graph: SchemaGraph) {
+  if (uiSchemaRegenerationTimer) {
+    clearTimeout(uiSchemaRegenerationTimer);
+  }
+  uiSchemaRegenerationTimer = setTimeout(() => {
+    const { regenerateFromGraph } = useUiSchemaStore.getState();
+    regenerateFromGraph(graph);
+    uiSchemaRegenerationTimer = null;
+  }, DEBOUNCE_DELAY);
+}
 
 export type JSONSchemaType = 'string' | 'number' | 'boolean' | 'object' | 'array' | 'enum';
 
@@ -56,9 +70,8 @@ export const useSchemaGraphStore = create<SchemaGraphState>((set, get) => {
       
       set({ graph: newGraph });
       
-      // Regenerate UI schema
-      const { regenerateFromGraph } = useUiSchemaStore.getState();
-      regenerateFromGraph(newGraph);
+      // Debounced UI schema regeneration
+      scheduleUiSchemaRegeneration(newGraph);
       
       return newNodeId;
     },
@@ -68,9 +81,8 @@ export const useSchemaGraphStore = create<SchemaGraphState>((set, get) => {
       const newGraph = removeNode(state.graph, nodeId);
       set({ graph: newGraph });
       
-      // Regenerate UI schema
-      const { regenerateFromGraph } = useUiSchemaStore.getState();
-      regenerateFromGraph(newGraph);
+      // Debounced UI schema regeneration
+      scheduleUiSchemaRegeneration(newGraph);
     },
 
     updateNode: (nodeId: string, updates: Partial<SchemaNode>) => {
@@ -78,9 +90,14 @@ export const useSchemaGraphStore = create<SchemaGraphState>((set, get) => {
       const newGraph = updateNode(state.graph, nodeId, updates);
       set({ graph: newGraph });
       
-      // Regenerate UI schema if structure changed
-      const { regenerateFromGraph } = useUiSchemaStore.getState();
-      regenerateFromGraph(newGraph);
+      // Debounced UI schema regeneration - only regenerate if structural changes
+      // (key, type, or children changes affect UI schema)
+      const affectsUiSchema = updates.key !== undefined || 
+                              updates.type !== undefined ||
+                              updates.title !== undefined;
+      if (affectsUiSchema) {
+        scheduleUiSchemaRegeneration(newGraph);
+      }
     },
 
     moveNode: (nodeId: string, newParentId: string, edgeType: EdgeType = 'child') => {
@@ -88,9 +105,8 @@ export const useSchemaGraphStore = create<SchemaGraphState>((set, get) => {
       const newGraph = moveNodeV2(state.graph, nodeId, newParentId, edgeType);
       set({ graph: newGraph });
       
-      // Regenerate UI schema
-      const { regenerateFromGraph } = useUiSchemaStore.getState();
-      regenerateFromGraph(newGraph);
+      // Debounced UI schema regeneration
+      scheduleUiSchemaRegeneration(newGraph);
     },
 
     reorderNode: (nodeId: string, newIndex: number) => {
@@ -98,16 +114,15 @@ export const useSchemaGraphStore = create<SchemaGraphState>((set, get) => {
       const newGraph = reorderNode(state.graph, nodeId, newIndex);
       set({ graph: newGraph });
       
-      // Regenerate UI schema
-      const { regenerateFromGraph } = useUiSchemaStore.getState();
-      regenerateFromGraph(newGraph);
+      // Debounced UI schema regeneration (order affects ui:order)
+      scheduleUiSchemaRegeneration(newGraph);
     },
 
     setSchemaFromJson: (inputSchema: RJSFSchema) => {
       const newGraph = fromJsonSchema(inputSchema);
       set({ graph: newGraph });
       
-      // Regenerate UI schema
+      // Immediate UI schema regeneration for schema import
       const { regenerateFromGraph } = useUiSchemaStore.getState();
       regenerateFromGraph(newGraph);
     },
@@ -126,7 +141,7 @@ export const useSchemaGraphStore = create<SchemaGraphState>((set, get) => {
       };
       traverse(state.graph.rootId);
       
-      state.graph.nodes.forEach((node, nodeId) => {
+      state.graph.nodes.forEach((_, nodeId) => {
         if (!reachableNodes.has(nodeId) && nodeId !== state.graph.rootId) {
           errors.push(`Orphaned node detected: ${nodeId}`);
         }
@@ -183,10 +198,8 @@ export const useSchemaGraphStore = create<SchemaGraphState>((set, get) => {
 });
 
 // Export types for convenience
-export type { SchemaGraph, SchemaNode };
-export type { JSONSchemaType };
+export type { SchemaGraph, SchemaNode, EdgeType };
 
 // Type alias for backward compatibility during migration
 export type FieldNode = SchemaNode;
-export type SchemaGraph = SchemaGraph;
 

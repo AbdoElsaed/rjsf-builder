@@ -11,6 +11,7 @@ import { getChildren } from "@/lib/graph/schema-graph";
 import { useExpandContext } from "./expand-context";
 import { Button } from "@/components/ui/button";
 import { Maximize2, Minimize2 } from "lucide-react";
+import { useMemo, memo } from "react";
 
 interface DraggedItem {
   type: string;
@@ -58,8 +59,11 @@ export function Canvas({
     },
   });
 
-  // Get root level nodes using V2 getChildren
-  const rootNodes = getChildren(graph, 'root', 'child').map(n => n.id);
+  // Get root level nodes using V2 getChildren - memoized
+  const rootNodes = useMemo(() => 
+    getChildren(graph, 'root', 'child').map(n => n.id),
+    [graph]
+  );
   
   // Handle expand/collapse all - one-time actions
   const handleExpandAll = () => {
