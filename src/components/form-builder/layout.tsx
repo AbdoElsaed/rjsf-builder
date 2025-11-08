@@ -5,14 +5,12 @@ import {
   type DragOverEvent,
   closestCenter,
   pointerWithin,
-  rectIntersection,
   MouseSensor,
   TouchSensor,
   useSensor,
   useSensors,
   DragOverlay,
 } from "@dnd-kit/core";
-import { arrayMove } from "@dnd-kit/sortable";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import {

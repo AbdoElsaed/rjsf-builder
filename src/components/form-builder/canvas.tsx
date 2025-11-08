@@ -10,8 +10,8 @@ import {
 import { getChildren } from "@/lib/graph/schema-graph";
 import { useExpandContext } from "./expand-context";
 import { Button } from "@/components/ui/button";
-import { Bookmark, ChevronDown, ChevronRight, ChevronsDownUp } from "lucide-react";
-import { useMemo, memo, useState } from "react";
+import { Bookmark, ChevronDown, ChevronRight } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface DraggedItem {
@@ -75,7 +75,7 @@ export function Canvas({
       nodeId: node.id,
       node,
     }));
-  }, [graph, getAllDefinitions]);
+  }, [getAllDefinitions]);
   
   // Handle expand/collapse all - one-time actions
   const handleExpandAll = () => {
@@ -188,7 +188,7 @@ export function Canvas({
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <div className="space-y-3 pl-4">
-                  {definitions.map(({ name, nodeId }) => (
+                  {definitions.map(({ nodeId }) => (
                     <div key={nodeId} className="border-l-2 border-primary/30 pl-4">
                       <FormNode
                         nodeId={nodeId}

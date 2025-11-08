@@ -1,4 +1,4 @@
-import type { SchemaGraph, SchemaNode, JSONSchemaType, EdgeType } from './schema-graph';
+import type { SchemaGraph, JSONSchemaType, EdgeType } from './schema-graph';
 import { isDescendant, getChildren, moveNode } from './schema-graph';
 
 /**

@@ -1,6 +1,6 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { type SchemaGraph, type SchemaNode, getChildren } from "./graph/schema-graph";
+import { type SchemaGraph, getChildren } from "./graph/schema-graph";
 import { getParent } from "./graph/schema-graph";
 
 export function cn(...inputs: ClassValue[]) {

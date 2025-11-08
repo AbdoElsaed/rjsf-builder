@@ -1,7 +1,7 @@
 import type { SchemaGraph, SchemaNode } from '../graph/schema-graph';
 import { getChildren } from '../graph/schema-graph';
 import type { UiSchema, NestedUiSchema } from '../store/ui-schema';
-import { getWidgetRegistry, type CustomWidget } from '../widgets/widget-registry';
+import { getWidgetRegistry } from '../widgets/widget-registry';
 import { compileToJsonSchema } from '../graph/schema-compiler';
 import type { RJSFSchema } from '@rjsf/utils';
 
@@ -134,22 +134,6 @@ function getNestedProperty(schema: RJSFSchema, keyPath: string): RJSFSchema | nu
   }
   
   return current || null;
-}
-
-/**
- * Find a node by its key (searches from root)
- */
-function findNodeByKey(graph: SchemaGraph, key: string, startNodeId: string = graph.rootId): SchemaNode | null {
-  const children = getChildren(graph, startNodeId, 'child');
-  for (const child of children) {
-    if (child.key === key) {
-      return child;
-    }
-    // Recursively search children
-    const found = findNodeByKey(graph, key, child.id);
-    if (found) return found;
-  }
-  return null;
 }
 
 /**

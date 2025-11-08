@@ -277,7 +277,7 @@ export function FieldPalette() {
       <CreateEmptyDefinitionDialog
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}
-        onCreated={(componentName) => {
+        onCreated={() => {
           // Component created successfully
           setComponentsOpen(true); // Expand components section
         }}

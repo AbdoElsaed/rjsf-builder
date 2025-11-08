@@ -49,12 +49,18 @@ export function FieldConfigPanel({
   const { migrateFormData } = useFormDataStore();
 
   // Store both form data and node-specific config in local state
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    title: string;
+    description: string;
+    key: string;
+    required: boolean;
+    default: string | number | boolean | undefined;
+  }>({
     title: "",
     description: "",
     key: "",
     required: false,
-    default: undefined as any,
+    default: undefined,
   });
   const [nodeConfig, setNodeConfig] = useState<FieldNodeWithConfig | null>(
     null
@@ -145,18 +151,19 @@ export function FieldConfigPanel({
     const oldPath = nodeConfig ? getNodePath(graph, nodeId) : "";
 
     // Parse default value based on type
-    let parsedDefault: any = undefined;
+    let parsedDefault: string | number | boolean | undefined = undefined;
     if (formData.default !== undefined && formData.default !== '') {
       if (nodeConfig.type === 'number') {
-        parsedDefault = formData.default === '' ? undefined : Number(formData.default);
-        if (isNaN(parsedDefault)) {
+        const numValue = Number(formData.default);
+        if (isNaN(numValue)) {
           toast.error("Default value must be a valid number");
           return;
         }
+        parsedDefault = numValue;
       } else if (nodeConfig.type === 'boolean') {
         parsedDefault = formData.default === 'true' || formData.default === true;
       } else {
-        parsedDefault = formData.default;
+        parsedDefault = String(formData.default);
       }
     }
 

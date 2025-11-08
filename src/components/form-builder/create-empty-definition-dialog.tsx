@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sparkles, AlertCircle, Plus } from "lucide-react";
 import { useSchemaGraphStore } from "@/lib/store/schema-graph";
+import type { JSONSchemaType } from "@/lib/graph/schema-graph";
 import { toast } from "sonner";
 import {
   Select,
@@ -79,7 +80,7 @@ export function CreateEmptyDefinitionDialog({
     try {
       // Create a new empty node of the selected type
       const nodeData = {
-        type: fieldType as any,
+        type: fieldType as JSONSchemaType,
         title: componentName,
         key: componentName.toLowerCase(),
       };

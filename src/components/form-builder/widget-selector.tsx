@@ -6,7 +6,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { getWidgetRegistry, type CustomWidget } from "@/lib/widgets/widget-registry";
+import { getWidgetRegistry } from "@/lib/widgets/widget-registry";
 import type { JSONSchemaType } from "@/lib/store/schema-graph";
 
 interface WidgetSelectorProps {
