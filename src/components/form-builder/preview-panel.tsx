@@ -56,20 +56,34 @@ export function PreviewPanel({ showPreview }: PreviewPanelProps) {
   const [uiSchemaEditMode, setUiSchemaEditMode] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Array<{ property: string; message: string }>>([]);
 
-  // Watch for schema changes and migrate form data
+  // Sync editor states when underlying data changes (but not during edit mode)
   useEffect(() => {
-    // Only migrate form data for automatic schema changes, not when manually editing
-    if (
-      !editMode &&
-      JSON.stringify(schema) !== JSON.stringify(previousSchema.current)
-    ) {
-      migrateFormData(previousSchema.current, schema);
+    if (!editMode && JSON.stringify(schema) !== JSON.stringify(previousSchema.current)) {
+      // Schema changed from external source (canvas edits)
+      const oldSchema = previousSchema.current;
+      // Migrate form data for automatic schema changes (before updating reference)
+      migrateFormData(oldSchema, schema);
+      // Update editor and reference
+      setEditedSchema(JSON.stringify(schema, null, 2));
       previousSchema.current = schema;
     } else if (!editMode) {
-      // Update the reference when not in edit mode
       previousSchema.current = schema;
     }
   }, [schema, migrateFormData, editMode]);
+  
+  // Sync UI schema editor when UI schema changes externally
+  useEffect(() => {
+    if (!uiSchemaEditMode) {
+      setEditedUiSchema(JSON.stringify(uiSchema, null, 2));
+    }
+  }, [uiSchema, uiSchemaEditMode]);
+  
+  // Sync form data editor when form data changes externally
+  useEffect(() => {
+    if (!formDataEditMode) {
+      setEditedFormData(JSON.stringify(formData, null, 2));
+    }
+  }, [formData, formDataEditMode]);
 
   // Create MUI theme based on the app's color mode
   const muiTheme = createTheme({
@@ -183,12 +197,34 @@ export function PreviewPanel({ showPreview }: PreviewPanelProps) {
   const handleSaveUiSchema = () => {
     try {
       const parsedUiSchema = JSON.parse(editedUiSchema);
+      // Mark all fields as manually edited to preserve them during regeneration
+      const { markFieldAsManuallyEdited } = useUiSchemaStore.getState();
+      const allPaths = getAllFieldPaths(parsedUiSchema);
+      allPaths.forEach(path => markFieldAsManuallyEdited(path));
+      
       updateUiSchema(parsedUiSchema);
       setUiSchemaEditMode(false);
       toast.success("UI Schema updated successfully");
     } catch {
       toast.error("Invalid UI Schema");
     }
+  };
+  
+  // Helper to get all field paths from nested UI schema
+  const getAllFieldPaths = (uiSchema: Record<string, unknown>, prefix = ''): string[] => {
+    const paths: string[] = [];
+    for (const key in uiSchema) {
+      const currentPath = prefix ? `${prefix}.${key}` : key;
+      const value = uiSchema[key];
+      if (value && typeof value === 'object' && !Array.isArray(value) && ('ui:widget' in value || 'ui:options' in value || 'ui:order' in value)) {
+        // This is a leaf node with UI schema properties
+        paths.push(currentPath);
+      } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+        // This is a nested object, recurse
+        paths.push(...getAllFieldPaths(value as Record<string, unknown>, currentPath));
+      }
+    }
+    return paths;
   };
 
   const handleSaveFormData = () => {
@@ -231,8 +267,12 @@ export function PreviewPanel({ showPreview }: PreviewPanelProps) {
 
   const handleFormChange = (e: IChangeEvent<Record<string, JSONValue>>) => {
     if (e.formData) {
+      // Update form data without triggering migration (this is a direct user edit)
       updateFormData(e.formData);
-      setEditedFormData(JSON.stringify(e.formData, null, 2));
+      // Only update editor if not in edit mode (to avoid conflicts)
+      if (!formDataEditMode) {
+        setEditedFormData(JSON.stringify(e.formData, null, 2));
+      }
     }
     
     // Extract validation errors from RJSF

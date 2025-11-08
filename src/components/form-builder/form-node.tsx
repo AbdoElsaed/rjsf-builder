@@ -103,13 +103,18 @@ const FormNodeComponent = function FormNode({
   const [isOpen, setIsOpen] = useState(true);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   
+  // Sync isEditing with selectedNodeId - when this node is selected, enter edit mode
+  useEffect(() => {
+    setIsEditing(selectedNodeId === nodeId);
+  }, [selectedNodeId, nodeId]);
+
   // Listen to expand/collapse triggers and update local state
   useEffect(() => {
     if (expandTrigger > 0) {
       setIsOpen(true);
     }
   }, [expandTrigger]);
-  
+
   useEffect(() => {
     if (collapseTrigger > 0) {
       setIsOpen(false);

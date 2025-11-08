@@ -156,10 +156,10 @@ export class WidgetRegistry {
     });
 
     this.registerWidget({
-      id: 'number',
+      id: 'updown',
       name: 'NumberWidget',
       displayName: 'Number Input',
-      description: 'Number input field',
+      description: 'Number input field with up/down controls',
       compatibleTypes: ['number'],
       defaultConfig: {},
       category: 'standard',

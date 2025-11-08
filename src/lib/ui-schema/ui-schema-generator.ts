@@ -1,5 +1,5 @@
 import type { SchemaGraph, SchemaNode } from '../graph/schema-graph';
-import { getChildren } from '../graph/schema-graph';
+import { getChildren, getParent } from '../graph/schema-graph';
 import type { UiSchema, NestedUiSchema } from '../store/ui-schema';
 import { getWidgetRegistry } from '../widgets/widget-registry';
 import { compileToJsonSchema } from '../graph/schema-compiler';
@@ -83,7 +83,8 @@ function ensureOrderMatchesCompiledSchema(
     const rootProperties = Object.keys(compiledSchema.properties);
     if (rootProperties.length > 0) {
       // Set root ui:order to match actual properties in JSON schema
-      uiSchema['ui:order'] = ensureWildcardOrder(rootProperties);
+      // Type assertion needed because NestedUiSchema can have ui:order at root
+      (uiSchema as Record<string, unknown>)['ui:order'] = ensureWildcardOrder(rootProperties);
     }
   }
   
@@ -160,26 +161,36 @@ function buildUiSchemaForNode(
 
   // Auto-detect widget if not already assigned
   const assignedWidget = node.ui?.['ui:widget'];
-  const widget = assignedWidget
-    ? widgetRegistry.getWidget(assignedWidget)
-    : widgetRegistry.getWidgetForField(node);
-
-  if (widget) {
-    fieldUiSchema['ui:widget'] = widget.id;
-    
-    // Merge default config with any existing options
-    const existingOptions = node.ui?.['ui:options'] || {};
-    fieldUiSchema['ui:options'] = {
-      ...widget.defaultConfig,
-      ...existingOptions,
-    };
-  } else if (node.ui?.['ui:widget']) {
-    // Widget was explicitly set but not found in registry - keep it
-    fieldUiSchema['ui:widget'] = node.ui['ui:widget'];
-    if (node.ui['ui:options']) {
+  
+  // Handle migration: 'number' widget ID should be 'updown' for RJSF compatibility
+  const normalizedWidget = assignedWidget === 'number' ? 'updown' : assignedWidget;
+  
+  // Valid RJSF widget IDs (standard widgets that RJSF recognizes)
+  const validRJSFWidgets = ['text', 'textarea', 'password', 'email', 'uri', 'data-url', 'updown', 'range', 'select', 'checkbox', 'radio', 'checkboxes'];
+  
+  // Only set widget if it's explicitly assigned by user AND it's a valid RJSF widget
+  // Don't auto-assign custom widgets (photo-gallery, yesno) as they're not registered with RJSF
+  if (normalizedWidget && validRJSFWidgets.includes(normalizedWidget)) {
+    // Widget was explicitly set and is valid
+    fieldUiSchema['ui:widget'] = normalizedWidget;
+    if (node.ui?.['ui:options']) {
       fieldUiSchema['ui:options'] = node.ui['ui:options'];
     }
+  } else if (!normalizedWidget) {
+    // No widget assigned - try to get a compatible widget from registry
+    // But only use it if it's a valid RJSF widget
+    const widget = widgetRegistry.getWidgetForField(node);
+    if (widget && validRJSFWidgets.includes(widget.id)) {
+      fieldUiSchema['ui:widget'] = widget.id;
+      const existingOptions = node.ui?.['ui:options'] || {};
+      fieldUiSchema['ui:options'] = {
+        ...widget.defaultConfig,
+        ...existingOptions,
+      };
+    }
+    // If widget is not a valid RJSF widget, don't set it - let RJSF use its default
   }
+  // If normalizedWidget exists but is not valid, don't set it - let RJSF use its default
 
   // Add field-specific UI options
   if (node.type === 'object') {
@@ -232,35 +243,80 @@ function buildUiSchemaForNode(
     }
   }
 
-  // Always add field to UI schema if it has children or UI properties
-  // Even if empty, we need to maintain structure for nested fields
-  if (fieldPath && fieldPath !== 'root') {
-    setNestedValue(uiSchema, fieldPath.split('.'), fieldUiSchema);
-  } else if (Object.keys(fieldUiSchema).length > 0) {
-    // Root level - merge directly only if there's content
-    Object.assign(uiSchema, fieldUiSchema);
+  // CRITICAL: Conditional blocks (allOf/anyOf/oneOf/if_block) should NOT have UI schema entries
+  // RJSF handles conditionals by dynamically merging then/else properties into the root schema
+  // The UI schema for fields in then/else branches should be at the root level, not nested
+  const isConditionalBlock = node.type === 'allOf' || node.type === 'anyOf' || node.type === 'oneOf' || node.type === 'if_block';
+  
+  // Only add UI schema entry if this is NOT a conditional block
+  // Conditional blocks don't need UI schema - their children are processed separately
+  if (!isConditionalBlock) {
+    // Always add field to UI schema if it has children or UI properties
+    // Even if empty, we need to maintain structure for nested fields
+    if (fieldPath && fieldPath !== 'root') {
+      setNestedValue(uiSchema, fieldPath.split('.'), fieldUiSchema);
+    } else if (Object.keys(fieldUiSchema).length > 0) {
+      // Root level - merge directly only if there's content
+      Object.assign(uiSchema, fieldUiSchema);
+    }
   }
 
   // Recursively process children - ONLY 'child' relationships
   // Conditional branches (then/else) are handled separately and should NOT be
   // included in the parent's ui:order or processed as regular children
-  children.forEach((child) => {
-    const childPath = fieldPath ? `${fieldPath}.${child.key}` : child.key;
-    buildUiSchemaForNode(graph, child, childPath, uiSchema, widgetRegistry);
-  });
+  // CRITICAL: For conditional blocks, we should NOT process regular children
+  // because conditional blocks don't have regular children that should appear in UI schema
+  // They only have then/else branches which are handled separately below
+  if (!isConditionalBlock) {
+    children.forEach((child) => {
+      const childPath = fieldPath ? `${fieldPath}.${child.key}` : child.key;
+      buildUiSchemaForNode(graph, child, childPath, uiSchema, widgetRegistry);
+    });
+  }
   
   // Handle conditional branches (then/else) separately if this is a conditional group or IF block
-  // These should NOT be in the parent's ui:order, but should have their own UI schema
-  if (node.type === 'allOf' || node.type === 'anyOf' || node.type === 'oneOf' || node.type === 'if_block') {
+  // CRITICAL: Fields in then/else branches should be placed at the ROOT level of UI schema
+  // (or the parent's level if the conditional block is nested), NOT under the conditional block key
+  // This is because RJSF dynamically merges then/else properties into the root schema
+  if (isConditionalBlock) {
+    // CRITICAL: For conditional blocks, we need to determine the parent's path
+    // The path passed to this function is the path TO the conditional block (includes its key)
+    // For root-level conditionals, the parent is root, so parentPath should be empty
+    // For nested conditionals, parentPath should be the path to the parent (without the conditional block's key)
+    const parentNode = getParent(graph, node.id);
+    let parentPath = '';
+    
+    if (parentNode) {
+      if (parentNode.id === graph.rootId) {
+        // Conditional block is a direct child of root - use empty path
+        parentPath = '';
+      } else {
+        // Conditional block is nested - extract parent's path from current path
+        // The path includes the conditional block's key, so we need to remove it
+        // For example, if path is "parent.new_if_then_else", parentPath should be "parent"
+        if (path) {
+          const pathParts = path.split('.');
+          // Remove the last part (the conditional block's key)
+          pathParts.pop();
+          parentPath = pathParts.join('.');
+        } else {
+          // This shouldn't happen, but if path is empty and parent is not root,
+          // something is wrong - use empty path as fallback
+          parentPath = '';
+        }
+      }
+    } else {
+      // No parent (shouldn't happen, but handle gracefully)
+      parentPath = '';
+    }
+    
     // Process then branch if it exists
     const thenChildren = getChildren(graph, node.id, 'then');
     if (thenChildren.length > 0) {
-      // Create a nested path for then branch fields
-      // These fields are conditionally rendered and should NOT be in root ui:order
       thenChildren.forEach((thenChild) => {
-        // Build UI schema for then branch fields, but don't add them to parent order
-        // The path structure ensures they're nested correctly
-        const thenPath = fieldPath ? `${fieldPath}.${thenChild.key}` : thenChild.key;
+        // Place then branch fields at the parent's level (root level for root conditionals)
+        // NOT nested under the conditional block key - use parentPath directly
+        const thenPath = parentPath ? `${parentPath}.${thenChild.key}` : thenChild.key;
         buildUiSchemaForNode(graph, thenChild, thenPath, uiSchema, widgetRegistry);
       });
     }
@@ -269,7 +325,9 @@ function buildUiSchemaForNode(
     const elseChildren = getChildren(graph, node.id, 'else');
     if (elseChildren.length > 0) {
       elseChildren.forEach((elseChild) => {
-        const elsePath = fieldPath ? `${fieldPath}.${elseChild.key}` : elseChild.key;
+        // Place else branch fields at the parent's level (root level for root conditionals)
+        // NOT nested under the conditional block key - use parentPath directly
+        const elsePath = parentPath ? `${parentPath}.${elseChild.key}` : elseChild.key;
         buildUiSchemaForNode(graph, elseChild, elsePath, uiSchema, widgetRegistry);
       });
     }

@@ -21,6 +21,8 @@ export type NestedUiSchema = {
 
 interface UiSchemaState {
     uiSchema: Record<string, UiSchema | NestedUiSchema>;
+    // Track manually edited fields to preserve them during regeneration
+    manualEdits: Set<string>;
     updateUiSchema: (newSchema: Record<string, UiSchema>) => void;
     updateFieldUiSchema: (fieldPath: string, uiOptions: UiSchema) => void;
     removeFieldUiSchema: (fieldPath: string) => void;
@@ -28,6 +30,8 @@ interface UiSchemaState {
     regenerateFromGraph: (graph: SchemaGraph) => void;
     assignWidget: (fieldPath: string, widgetId: string) => void;
     getWidgetForField: (fieldPath: string) => string | null;
+    markFieldAsManuallyEdited: (fieldPath: string) => void;
+    clearManualEdits: () => void;
 }
 
 function createNestedObject(path: string[], value: UiSchema): NestedUiSchema {
@@ -57,9 +61,47 @@ function mergeUiSchemas(target: NestedUiSchema, source: NestedUiSchema): void {
     }
 }
 
+// Helper to get all field paths from a nested UI schema
+function getAllFieldPaths(uiSchema: NestedUiSchema, prefix = ''): string[] {
+    const paths: string[] = [];
+    for (const key in uiSchema) {
+        const currentPath = prefix ? `${prefix}.${key}` : key;
+        const value = uiSchema[key];
+        if (value && typeof value === 'object' && 'ui:widget' in value) {
+            // This is a leaf node with UI schema
+            paths.push(currentPath);
+        } else if (value && typeof value === 'object') {
+            // This is a nested object, recurse
+            paths.push(...getAllFieldPaths(value as NestedUiSchema, currentPath));
+        }
+    }
+    return paths;
+}
+
+// Helper to get nested value from UI schema
+function getNestedValue(uiSchema: NestedUiSchema, path: string): UiSchema | NestedUiSchema | undefined {
+    const parts = path.split('.');
+    let current: NestedUiSchema | UiSchema = uiSchema;
+    for (const part of parts) {
+        if (!current[part] || typeof current[part] !== 'object') {
+            return undefined;
+        }
+        current = current[part] as NestedUiSchema | UiSchema;
+    }
+    return current;
+}
+
 export const useUiSchemaStore = create<UiSchemaState>((set) => ({
     uiSchema: {},
-    updateUiSchema: (newSchema) => set({ uiSchema: newSchema }),
+    manualEdits: new Set<string>(),
+    updateUiSchema: (newSchema) => {
+        // Mark all fields in the new schema as manually edited
+        const paths = getAllFieldPaths(newSchema);
+        set({ 
+            uiSchema: newSchema,
+            manualEdits: new Set(paths)
+        });
+    },
     updateFieldUiSchema: (fieldPath, uiOptions) =>
         set((state) => {
             const newUiSchema = { ...state.uiSchema };
@@ -82,7 +124,11 @@ export const useUiSchemaStore = create<UiSchemaState>((set) => ({
                 newUiSchema[rootKey] = nestedSchema[rootKey];
             }
 
-            return { uiSchema: newUiSchema };
+            // Mark this field as manually edited
+            const newManualEdits = new Set(state.manualEdits);
+            newManualEdits.add(fieldPath);
+
+            return { uiSchema: newUiSchema, manualEdits: newManualEdits };
         }),
     removeFieldUiSchema: (fieldPath) =>
         set((state) => {
@@ -119,10 +165,51 @@ export const useUiSchemaStore = create<UiSchemaState>((set) => ({
         }),
 
     regenerateFromGraph: (graph: SchemaGraph) =>
-        set(() => {
-            const newUiSchema = generateUiSchema(graph);
-            return { uiSchema: newUiSchema };
+        set((state) => {
+            const generatedUiSchema = generateUiSchema(graph);
+            const mergedUiSchema = JSON.parse(JSON.stringify(generatedUiSchema)) as NestedUiSchema;
+            
+            // Preserve manual edits by merging them back into the generated schema
+            state.manualEdits.forEach((fieldPath) => {
+                const manualValue = getNestedValue(state.uiSchema, fieldPath);
+                if (manualValue) {
+                    // Merge the manual edit back into the generated schema
+                    const pathParts = fieldPath.split('.');
+                    const rootKey = pathParts[0];
+                    
+                    if (rootKey in mergedUiSchema) {
+                        // Field exists in generated schema, merge the manual edit
+                        const nestedSchema = createNestedObject(pathParts, manualValue as UiSchema);
+                        mergeUiSchemas(
+                            mergedUiSchema[rootKey] as NestedUiSchema,
+                            nestedSchema[rootKey] as NestedUiSchema
+                        );
+                    } else {
+                        // Field doesn't exist in generated schema (might have been deleted)
+                        // Only preserve if it's a valid path in the new schema
+                        // For now, we'll preserve it anyway - user can clean it up manually
+                        if (!mergedUiSchema[rootKey]) {
+                            mergedUiSchema[rootKey] = {};
+                        }
+                        const nestedSchema = createNestedObject(pathParts, manualValue as UiSchema);
+                        mergeUiSchemas(
+                            mergedUiSchema[rootKey] as NestedUiSchema,
+                            nestedSchema[rootKey] as NestedUiSchema
+                        );
+                    }
+                }
+            });
+            
+            return { uiSchema: mergedUiSchema };
         }),
+    markFieldAsManuallyEdited: (fieldPath: string) =>
+        set((state) => {
+            const newManualEdits = new Set(state.manualEdits);
+            newManualEdits.add(fieldPath);
+            return { manualEdits: newManualEdits };
+        }),
+    clearManualEdits: () =>
+        set({ manualEdits: new Set<string>() }),
 
     assignWidget: (fieldPath: string, widgetId: string) =>
         set((state) => {
