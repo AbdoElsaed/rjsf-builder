@@ -68,6 +68,7 @@ export function Canvas({
   );
   
   // Get all definitions for editing
+  // Depend on graph to ensure updates when definitions change
   const definitions = useMemo(() => {
     const defs = getAllDefinitions();
     return Array.from(defs.entries()).map(([name, node]) => ({
@@ -75,7 +76,7 @@ export function Canvas({
       nodeId: node.id,
       node,
     }));
-  }, [getAllDefinitions]);
+  }, [graph, getAllDefinitions]);
   
   // Handle expand/collapse all - one-time actions
   const handleExpandAll = () => {
