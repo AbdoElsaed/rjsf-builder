@@ -73,6 +73,7 @@ export interface SchemaNode {
   
   // Definition node properties
   definitionName?: string;  // For definition nodes
+  isDefinition?: boolean;   // Flag to identify definition nodes
   
   // Reference node properties
   refTarget?: string;  // For $ref nodes pointing to definitions
@@ -539,6 +540,7 @@ export function reorderNode(
   newIndex: number
 ): SchemaGraph {
   const parentId = graph.parentIndex.get(nodeId);
+  
   if (!parentId) {
     throw new Error('Node has no parent');
   }
@@ -623,13 +625,46 @@ export function reorderNode(
 // ============================================================================
 
 /**
+ * Disconnect a node from its parent without removing it from the graph
+ * Used for definitions - they stay in the graph but aren't part of the tree
+ */
+function disconnectFromParent(graph: SchemaGraph, nodeId: string): SchemaGraph {
+  const parentId = graph.parentIndex.get(nodeId);
+  if (!parentId) {
+    return graph; // Already disconnected
+  }
+  
+  // Find and remove the parent->child edge
+  const edgeToRemove = Array.from(graph.edges.values()).find(
+    edge => edge.sourceId === parentId && edge.targetId === nodeId
+  );
+  
+  if (edgeToRemove) {
+    graph.edges.delete(edgeToRemove.id);
+  }
+  
+  // Remove from parent index
+  graph.parentIndex.delete(nodeId);
+  
+  // Remove from children index
+  const childrenSet = graph.childrenIndex.get(parentId);
+  if (childrenSet) {
+    childrenSet.delete(nodeId);
+  }
+  
+  return graph;
+}
+
+/**
  * Create a definition from a node or group of nodes
  * Definitions are reusable schema components stored separately from main schema
+ * The node keeps its original type and structure but is moved to definitions-only space
  */
 export function createDefinition(
   graph: SchemaGraph,
   name: string,
-  sourceNodeId: string
+  sourceNodeId: string,
+  disconnectFromTree: boolean = false
 ): SchemaGraph {
   if (graph.definitions.has(name)) {
     throw new Error(`Definition "${name}" already exists`);
@@ -642,15 +677,24 @@ export function createDefinition(
   const newGraph = cloneGraph(graph);
   const sourceNode = newGraph.nodes.get(sourceNodeId)!;
   
-  // Mark node as definition and set definition name
+  // Mark node as definition
   const definitionNode: SchemaNode = {
     ...sourceNode,
-    type: 'definition' as SchemaNodeType,
     definitionName: name,
+    isDefinition: true,
   };
   
+  // Update the node
   newGraph.nodes.set(sourceNodeId, definitionNode);
+  
+  // Register in definitions map
   newGraph.definitions.set(name, sourceNodeId);
+  
+  // If disconnectFromTree, remove from parent-child relationships
+  // but keep the node in the graph for compilation
+  if (disconnectFromTree) {
+    disconnectFromParent(newGraph, sourceNodeId);
+  }
   
   return newGraph;
 }
@@ -777,8 +821,8 @@ export function deleteDefinition(
   if (definitionNode) {
     // Remove definition-specific properties
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { definitionName, ...rest } = definitionNode;
-    newGraph.nodes.set(definitionNodeId, { ...rest, type: 'object' as SchemaNodeType });
+    const { definitionName, isDefinition, ...rest } = definitionNode;
+    newGraph.nodes.set(definitionNodeId, rest);
   }
   
   return newGraph;

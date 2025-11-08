@@ -530,27 +530,8 @@ function compileCondition(condition: { field: string; operator: string; value: u
  * Compile a definition node (its content, not the wrapper)
  */
 function compileDefinitionNode(graph: SchemaGraph, node: SchemaNode): RJSFSchema {
-  // Definition nodes are just regular nodes marked as definitions
-  // Compile them as their actual type
-  if (node.type === 'definition') {
-    // Get the actual type from the node (it should have been preserved)
-    // For now, treat as object if it has children, otherwise infer from properties
-    const children = getChildren(graph, node.id, 'child');
-    
-    if (children.length > 0) {
-      // It's an object-like definition
-      return compileFieldNode(graph, { ...node, type: 'object' });
-    }
-    
-    // Infer type from node properties
-    if (node.enum) {
-      return compileFieldNode(graph, { ...node, type: 'enum' });
-    }
-    
-    // Default to object
-    return compileFieldNode(graph, { ...node, type: 'object' });
-  }
-  
+  // Definition nodes keep their original type, just compile them normally
+  // The isDefinition flag is metadata only and doesn't affect compilation
   return compileFieldNode(graph, node);
 }
 

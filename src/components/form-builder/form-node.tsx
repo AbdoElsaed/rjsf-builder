@@ -13,7 +13,11 @@ import {
   Settings2,
   ArrowRight,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
+  Bookmark,
+  AlertCircle,
+  Info,
 } from "lucide-react";
 import { useState, useEffect, useMemo, memo } from "react";
 import {
@@ -28,6 +32,7 @@ import { SortableContext } from "@dnd-kit/sortable";
 import { verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { FieldConfigPanel } from "./field-config-panel";
 import { Button } from "@/components/ui/button";
+import { SaveAsComponentDialog } from "./save-as-component-dialog";
 import type { FormNodeProps } from "./types";
 import { IfBlock } from "./if-block";
 import {
@@ -96,6 +101,7 @@ const FormNodeComponent = function FormNode({
   const [isEditing, setIsEditing] = useState(false);
   const [nestingDepth, setNestingDepth] = useState(0);
   const [isOpen, setIsOpen] = useState(true);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
   
   // Listen to expand/collapse triggers and update local state
   useEffect(() => {
@@ -117,12 +123,23 @@ const FormNodeComponent = function FormNode({
   const nodeType = useMemo(() => node?.type ?? '', [node?.type]);
   const isConditional = useMemo(() => node ? isConditionalType(nodeType) : false, [node, nodeType]);
   
+  // Check if node can be saved as a component
+  const canSaveAsComponent = useMemo(() => {
+    if (!node) return false;
+    // Can't save: ref nodes, root node, or already a definition
+    if (node.type === 'ref' || nodeId === 'root' || node.isDefinition) {
+      return false;
+    }
+    // Can save: objects, arrays, and fields with structure
+    return true;
+  }, [node, nodeId]);
+  
   // Get children using V2 edge-based lookup - memoized
   // Subscribe to graph changes via selector that returns stable string reference
   const childIdsString = useSchemaGraphStore((state) => {
-    // Return a stable string based on child edges - only changes when edges actually change
+    // Return a stable string based on child edges - DO NOT SORT, order matters!
     const children = getChildren(state.graph, nodeId, 'child');
-    return children.map(n => n.id).sort().join(',');
+    return children.map(n => n.id).join(','); // Preserve order from getChildren
   });
   
   // Get children from store, memoized based on the stable string reference
@@ -435,14 +452,13 @@ const FormNodeComponent = function FormNode({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-6 w-6 p-0 hover:bg-muted"
+                  className="h-7 w-7 p-0 hover:bg-muted/80 rounded-md transition-all duration-200 hover:scale-105"
                 >
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 text-muted-foreground transition-transform duration-200",
-                      isOpen && "transform rotate-180"
-                    )}
-                  />
+                  {isOpen ? (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-all duration-200" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground transition-all duration-200" />
+                  )}
                   <span className="sr-only">Toggle section</span>
                 </Button>
               </CollapsibleTrigger>
@@ -450,12 +466,32 @@ const FormNodeComponent = function FormNode({
                 {Icon && (
                   <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 )}
-                <div className="flex-1 truncate">
-                  <span className="text-sm font-medium">{node.title}</span>
-                  {node.key && (
-                    <span className="ml-1 text-xs text-muted-foreground">
-                      ({node.key})
-                    </span>
+                <div className="flex flex-1 items-center gap-2 min-w-0">
+                  <div className="flex-1 truncate">
+                    <span className="text-sm font-medium">{node.title}</span>
+                    {node.key && (
+                      <span className="ml-1 text-xs text-muted-foreground">
+                        ({node.key})
+                      </span>
+                    )}
+                  </div>
+                  {node.type === 'ref' && node.refTarget && (
+                    <div 
+                      className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-primary/10 border border-primary/30 text-xs text-primary flex-shrink-0 hover:bg-primary/15 transition-colors cursor-help"
+                      title={`References definition: ${node.refTarget}`}
+                    >
+                      <Bookmark className="h-3 w-3 fill-primary/20" />
+                      <span className="font-medium">{node.refTarget}</span>
+                    </div>
+                  )}
+                  {node.isDefinition && (
+                    <div 
+                      className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-600 dark:text-emerald-400 flex-shrink-0 hover:bg-emerald-500/15 transition-colors"
+                      title={`Reusable component: ${node.definitionName}`}
+                    >
+                      <Bookmark className="h-3 w-3 fill-emerald-500/20" />
+                      <span className="font-medium">Component</span>
+                    </div>
                   )}
                 </div>
                 <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
@@ -493,7 +529,7 @@ const FormNodeComponent = function FormNode({
                       <div className="w-px h-4 bg-border mx-0.5" />
                     </>
                   )}
-                  {/* Edit and Delete buttons */}
+                  {/* Edit, Save as Component, and Delete buttons */}
                   <Button
                     variant="ghost"
                     size="icon"
@@ -504,6 +540,21 @@ const FormNodeComponent = function FormNode({
                     <Settings2 className="h-3.5 w-3.5" />
                     <span className="sr-only">Edit</span>
                   </Button>
+                  {canSaveAsComponent && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 hover:bg-muted text-primary hover:text-primary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowSaveDialog(true);
+                      }}
+                      title="Save as Reusable Definition"
+                    >
+                      <Bookmark className="h-3.5 w-3.5" />
+                      <span className="sr-only">Save as Component</span>
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     size="icon"
@@ -613,14 +664,13 @@ const FormNodeComponent = function FormNode({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-6 w-6 p-0 hover:bg-muted"
+                    className="h-7 w-7 p-0 hover:bg-muted/80 rounded-md transition-all duration-200 hover:scale-105"
                   >
-                    <ChevronDown
-                      className={cn(
-                        "h-4 w-4 text-muted-foreground transition-transform duration-200",
-                        isOpen && "transform rotate-180"
-                      )}
-                    />
+                    {isOpen ? (
+                      <ChevronDown className="h-4 w-4 text-muted-foreground transition-all duration-200" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-muted-foreground transition-all duration-200" />
+                    )}
                     <span className="sr-only">Toggle section</span>
                   </Button>
                 </CollapsibleTrigger>
@@ -628,12 +678,32 @@ const FormNodeComponent = function FormNode({
               {Icon && (
                 <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
               )}
-              <div className="flex-1 truncate">
-                <span className="text-sm font-medium">{node.title}</span>
-                {node.key && (
-                  <span className="ml-1 text-xs text-muted-foreground">
-                    ({node.key})
-                  </span>
+              <div className="flex flex-1 items-center gap-2 min-w-0">
+                <div className="flex-1 truncate">
+                  <span className="text-sm font-medium">{node.title}</span>
+                  {node.key && (
+                    <span className="ml-1 text-xs text-muted-foreground">
+                      ({node.key})
+                    </span>
+                  )}
+                </div>
+                {node.type === 'ref' && node.refTarget && (
+                  <div 
+                    className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-primary/10 border border-primary/30 text-xs text-primary flex-shrink-0 hover:bg-primary/15 transition-colors cursor-help"
+                    title={`References component: ${node.refTarget}`}
+                  >
+                    <Bookmark className="h-3 w-3 fill-primary/20" />
+                    <span className="font-medium">{node.refTarget}</span>
+                  </div>
+                )}
+                {node.isDefinition && (
+                  <div 
+                    className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-600 dark:text-emerald-400 flex-shrink-0 hover:bg-emerald-500/15 transition-colors"
+                    title={`Reusable component: ${node.definitionName}`}
+                  >
+                    <Bookmark className="h-3 w-3 fill-emerald-500/20" />
+                    <span className="font-medium">Component</span>
+                  </div>
                 )}
               </div>
               {/* Show nesting path on hover when dragging */}
@@ -678,7 +748,7 @@ const FormNodeComponent = function FormNode({
                     <div className="w-px h-4 bg-border mx-0.5" />
                   </>
                 )}
-                {/* Edit and Delete buttons */}
+                {/* Edit, Save as Component, and Delete buttons */}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -689,6 +759,21 @@ const FormNodeComponent = function FormNode({
                   <Settings2 className="h-3.5 w-3.5" />
                   <span className="sr-only">Edit</span>
                 </Button>
+                {canSaveAsComponent && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 hover:bg-muted text-primary hover:text-primary"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowSaveDialog(true);
+                    }}
+                    title="Save as Reusable Definition"
+                  >
+                    <Bookmark className="h-3.5 w-3.5" />
+                    <span className="sr-only">Save as Component</span>
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -750,6 +835,23 @@ const FormNodeComponent = function FormNode({
                           <span className="text-xs text-destructive/70">This field type is not compatible</span>
                         </div>
                       )
+                    ) : nodeType === "array" ? (
+                      <div className="flex flex-col items-center gap-2 w-full max-w-sm">
+                        <div className="flex items-center gap-2 text-amber-600 dark:text-amber-500">
+                          <AlertCircle className="h-4 w-4" />
+                          <span className="text-sm font-medium">Missing Items Definition</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground text-center">
+                          Arrays require an items definition. Drag a field here to define what each array item should contain.
+                        </p>
+                        <div className="flex items-start gap-2 mt-1 p-2 rounded-md bg-muted/50 border border-border/50 w-full">
+                          <Info className="h-3.5 w-3.5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                          <div className="text-xs text-muted-foreground">
+                            <p className="font-medium mb-0.5">Tip:</p>
+                            <p>For example, drag a "Text" field to create an array of strings, or an "Object" to create an array of objects.</p>
+                          </div>
+                        </div>
+                      </div>
                     ) : (
                       <span className="text-xs text-muted-foreground">Drop fields here</span>
                     )}
@@ -759,7 +861,7 @@ const FormNodeComponent = function FormNode({
             </CollapsibleContent>
           )}
         </Collapsible>
-      )}
+        )}
       </div>
       {/* Insertion indicator line below - shown when reordering */}
       {showInsertIndicator && insertBelow && (
@@ -767,6 +869,19 @@ const FormNodeComponent = function FormNode({
           <div className="h-0.5 bg-primary rounded-full mx-4 shadow-lg shadow-primary/50 animate-pulse" />
           <div className="absolute left-2 top-1/2 -translate-y-1/2 w-2 h-2 bg-primary rounded-full border-2 border-background shadow-md" />
         </div>
+      )}
+      
+      {/* Save as Component Dialog */}
+      {canSaveAsComponent && (
+        <SaveAsComponentDialog
+          open={showSaveDialog}
+          onOpenChange={setShowSaveDialog}
+          nodeId={nodeId}
+          onSaved={() => {
+            // Component saved successfully
+            setShowSaveDialog(false);
+          }}
+        />
       )}
     </>
   );

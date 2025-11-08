@@ -39,6 +39,7 @@ interface DraggedItem {
   label?: string;
   nodeId?: string;
   parentId?: string;
+  definitionName?: string; // For component references
 }
 
 interface FormBuilderLayoutProps {
@@ -56,7 +57,7 @@ export function FormBuilderLayout({ showPreview = true }: FormBuilderLayoutProps
     relationshipType: 'child' | 'then' | 'else';
     canDrop: boolean;
   } | null>(null);
-  const { addNode, moveNode, reorderNode, graph, updateNode, getNode } =
+  const { addNode, moveNode, reorderNode, graph, updateNode, getNode, createRefToDefinition } =
     useSchemaGraphStore();
 
   // Initialize sensors
@@ -189,7 +190,37 @@ export function FormBuilderLayout({ showPreview = true }: FormBuilderLayoutProps
     const dropTarget = getDropTarget(overId, graph);
     if (!dropTarget) return;
 
-    // Case 1: Dropping a new field from the palette
+    // Case 1a: Dropping a component from the palette (creates a reference)
+    if (activeData?.type === 'ref' && activeData?.definitionName && !graph.nodes.has(String(activeId))) {
+      const definitionName = activeData.definitionName as string;
+      const parentId = dropTarget.relationshipType === 'child' ? dropTarget.parentId : 'root';
+      
+      // Generate a unique key from the component name
+      const uniqueKey = generateUniqueKey(graph, definitionName, parentId);
+      
+      // Create reference to definition
+      const newNodeId = createRefToDefinition(definitionName, parentId, uniqueKey);
+
+      // If dropping into IF block branch, use moveNode with correct edge type
+      if (dropTarget.relationshipType === 'then' || dropTarget.relationshipType === 'else') {
+        moveNode(newNodeId, dropTarget.parentId, dropTarget.relationshipType);
+        
+        // Also update legacy then/else arrays for backward compatibility
+        const parentNode = getNode(dropTarget.parentId);
+        if (parentNode && parentNode.type === 'if_block') {
+          const branchArray = (parentNode[dropTarget.relationshipType] as string[] || []);
+          if (!branchArray.includes(newNodeId)) {
+            updateNode(dropTarget.parentId, {
+              ...parentNode,
+              [dropTarget.relationshipType]: [...branchArray, newNodeId],
+            });
+          }
+        }
+      }
+      return;
+    }
+
+    // Case 1b: Dropping a new field from the palette
     if (activeData?.type && !graph.nodes.has(String(activeId))) {
       // Validate drop - pass the type directly for palette items
       const canDrop = canDropNode(graph, activeData.type as JSONSchemaType, dropTarget.parentId, dropTarget.relationshipType);

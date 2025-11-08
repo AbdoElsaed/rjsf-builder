@@ -162,8 +162,10 @@ function buildUiSchemaForNode(
   uiSchema: NestedUiSchema,
   widgetRegistry: ReturnType<typeof getWidgetRegistry>
 ): void {
-  // Skip root node in path
-  const fieldPath = path ? path : node.key;
+  // Skip root node in path - root node should never create a "root" key in UI schema
+  // Root-level properties should be at the root of the UI schema, not nested
+  const isRootNode = node.id === graph.rootId;
+  const fieldPath = isRootNode ? '' : (path ? path : node.key);
 
   // Get children of this node - ONLY 'child' relationships, not 'then'/'else'
   // This is critical: conditional fields in then/else branches should NOT be in ui:order

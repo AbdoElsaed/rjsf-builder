@@ -10,8 +10,9 @@ import {
 import { getChildren } from "@/lib/graph/schema-graph";
 import { useExpandContext } from "./expand-context";
 import { Button } from "@/components/ui/button";
-import { Maximize2, Minimize2 } from "lucide-react";
-import { useMemo, memo } from "react";
+import { Bookmark, ChevronDown, ChevronRight, ChevronsDownUp } from "lucide-react";
+import { useMemo, memo, useState } from "react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface DraggedItem {
   type: string;
@@ -49,8 +50,9 @@ export function Canvas({
   activeDropZone,
   dropPreview,
 }: CanvasProps) {
-  const { graph } = useSchemaGraphStore();
+  const { graph, getAllDefinitions } = useSchemaGraphStore();
   const { triggerExpandAll, triggerCollapseAll } = useExpandContext();
+  const [definitionsOpen, setDefinitionsOpen] = useState(true);
   const { setNodeRef, isOver } = useDroppable({
     id: "root",
     data: {
@@ -64,6 +66,16 @@ export function Canvas({
     getChildren(graph, 'root', 'child').map(n => n.id),
     [graph]
   );
+  
+  // Get all definitions for editing
+  const definitions = useMemo(() => {
+    const defs = getAllDefinitions();
+    return Array.from(defs.entries()).map(([name, node]) => ({
+      name,
+      nodeId: node.id,
+      node,
+    }));
+  }, [graph, getAllDefinitions]);
   
   // Handle expand/collapse all - one-time actions
   const handleExpandAll = () => {
@@ -83,27 +95,32 @@ export function Canvas({
 
   return (
     <ScrollArea className="h-full">
-      {/* Expand/Collapse All Controls - Simple & Clean */}
+      {/* Expand/Collapse All Controls - Modern Design */}
       {rootNodes.length > 0 && (
-        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-6 py-2 flex items-center justify-end gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 hover:bg-muted"
-            onClick={handleExpandAll}
-            title="Expand all"
-          >
-            <Maximize2 className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 hover:bg-muted"
-            onClick={handleCollapseAll}
-            title="Collapse all"
-          >
-            <Minimize2 className="h-4 w-4" />
-          </Button>
+        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border/50 px-6 py-3 flex items-center justify-end">
+          <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-muted/30 p-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-3 text-xs font-medium hover:bg-background transition-all duration-200"
+              onClick={handleExpandAll}
+              title="Expand all fields"
+            >
+              <ChevronDown className="h-3.5 w-3.5 mr-1.5" />
+              Expand All
+            </Button>
+            <div className="h-4 w-px bg-border/50" />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-3 text-xs font-medium hover:bg-background transition-all duration-200"
+              onClick={handleCollapseAll}
+              title="Collapse all fields"
+            >
+              <ChevronRight className="h-3.5 w-3.5 mr-1.5" />
+              Collapse All
+            </Button>
+          </div>
         </div>
       )}
       <div
@@ -137,6 +154,60 @@ export function Canvas({
           <div className="absolute top-6 left-6 right-6 h-1.5 bg-primary rounded-full animate-pulse z-10 shadow-lg shadow-primary/50" />
         )}
         
+        {/* Definitions Section - Editable Definitions */}
+        {definitions.length > 0 && (
+          <div className="mb-6 pb-6 border-b border-border/50">
+            <Collapsible open={definitionsOpen} onOpenChange={setDefinitionsOpen}>
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="w-full justify-between p-3 h-auto hover:bg-muted/50 mb-3 rounded-lg transition-all duration-200 group"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 rounded-md bg-primary/10 group-hover:bg-primary/20 transition-colors">
+                      <Bookmark className="h-4 w-4 text-primary" />
+                    </div>
+                    <div className="flex flex-col items-start">
+                      <span className="font-medium text-sm">Definitions</span>
+                      <span className="text-xs text-muted-foreground">
+                        {definitions.length} definition{definitions.length !== 1 ? 's' : ''} • Edit reusable components
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground hidden sm:inline">
+                      {definitionsOpen ? 'Collapse' : 'Expand'}
+                    </span>
+                    {definitionsOpen ? (
+                      <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform duration-200" />
+                    )}
+                  </div>
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="space-y-3 pl-4">
+                  {definitions.map(({ name, nodeId }) => (
+                    <div key={nodeId} className="border-l-2 border-primary/30 pl-4">
+                      <FormNode
+                        nodeId={nodeId}
+                        selectedNodeId={selectedNodeId}
+                        onSelect={onNodeSelect}
+                        isDragging={isDragging}
+                        draggedItem={draggedItem}
+                        activeDropZone={activeDropZone}
+                        dropPreview={dropPreview}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          </div>
+        )}
+        
+        {/* Root Fields Section */}
         {rootNodes.length === 0 ? (
           <div className="flex h-full items-center justify-center min-h-[400px]">
             {isDragging ? (

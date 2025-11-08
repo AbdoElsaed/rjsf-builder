@@ -14,6 +14,7 @@ import {
 import { fromJsonSchema } from '../graph/schema-importer';
 import { compileToJsonSchema } from '../graph/schema-compiler';
 import { useUiSchemaStore } from './ui-schema';
+import { createDefinition, createRefToDefinition, getDefinitions } from '../graph/schema-graph';
 
 // Debounce UI schema regeneration to batch updates
 let uiSchemaRegenerationTimer: ReturnType<typeof setTimeout> | null = null;
@@ -51,6 +52,11 @@ interface SchemaGraphState {
   getNode: (nodeId: string) => SchemaNode | undefined;
   getChildren: (nodeId: string) => SchemaNode[];
   getParent: (nodeId: string) => SchemaNode | null;
+  
+  // Definitions
+  saveAsDefinition: (nodeId: string, name: string, disconnectFromTree?: boolean) => void;
+  createRefToDefinition: (definitionName: string, parentId: string, key?: string) => string;
+  getAllDefinitions: () => Map<string, SchemaNode>;
 }
 
 // Create the store using SchemaGraph directly
@@ -193,6 +199,32 @@ export const useSchemaGraphStore = create<SchemaGraphState>((set, get) => {
     getParent: (nodeId: string) => {
       const state = get();
       return getParent(state.graph, nodeId);
+    },
+    
+    // Definition methods
+    saveAsDefinition: (nodeId: string, name: string, disconnectFromTree: boolean = false) => {
+      const state = get();
+      const newGraph = createDefinition(state.graph, name, nodeId, disconnectFromTree);
+      set({ graph: newGraph });
+      scheduleUiSchemaRegeneration(newGraph);
+    },
+    
+    createRefToDefinition: (definitionName: string, parentId: string, key?: string) => {
+      const state = get();
+      const newGraph = createRefToDefinition(state.graph, definitionName, parentId, key);
+      set({ graph: newGraph });
+      
+      // Find the new ref node ID
+      const newNodeId = Array.from(newGraph.nodes.keys())
+        .find(id => !state.graph.nodes.has(id)) || '';
+      
+      scheduleUiSchemaRegeneration(newGraph);
+      return newNodeId;
+    },
+    
+    getAllDefinitions: () => {
+      const state = get();
+      return getDefinitions(state.graph);
     },
   };
 });

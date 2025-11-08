@@ -13,7 +13,7 @@ import type { IChangeEvent } from "@rjsf/core";
 import { useTheme } from "@/components/theme-provider";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { toast } from "sonner";
-import { Pencil, X, Check, Copy } from "lucide-react";
+import { Pencil, X, Check, Copy, AlertCircle, AlertTriangle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // Create the Material-UI form component
@@ -54,6 +54,7 @@ export function PreviewPanel({ showPreview }: PreviewPanelProps) {
   );
   const [formDataEditMode, setFormDataEditMode] = useState(false);
   const [uiSchemaEditMode, setUiSchemaEditMode] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Array<{ property: string; message: string }>>([]);
 
   // Watch for schema changes and migrate form data
   useEffect(() => {
@@ -233,23 +234,104 @@ export function PreviewPanel({ showPreview }: PreviewPanelProps) {
       updateFormData(e.formData);
       setEditedFormData(JSON.stringify(e.formData, null, 2));
     }
+    
+    // Extract validation errors from RJSF
+    if (e.errors && e.errors.length > 0) {
+      const errors = e.errors.map((error) => ({
+        property: error.property || 'root',
+        message: error.message || 'Validation error',
+      }));
+      setValidationErrors(errors);
+    } else {
+      setValidationErrors([]);
+    }
   };
 
   return (
     <ScrollArea className="h-full">
       <div className="p-6 pt-20">
         {showPreview ? (
-          <div className="rounded-xl border border-border/50 bg-card shadow-sm p-6">
-            <ThemeProvider theme={muiTheme}>
-              <Form
-                schema={schema}
-                uiSchema={uiSchema}
-                validator={validator}
-                formData={formData}
-                onChange={handleFormChange}
-                onSubmit={console.log}
-              />
-            </ThemeProvider>
+          <div className="space-y-4">
+            {/* Validation Errors Display */}
+            {validationErrors.length > 0 && (
+              <div className="rounded-xl border border-destructive/50 bg-destructive/10 shadow-sm p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-semibold text-destructive mb-2">
+                      Validation Errors ({validationErrors.length})
+                    </h3>
+                    <div className="space-y-1.5">
+                      {validationErrors.map((error, index) => (
+                        <div
+                          key={index}
+                          className="text-xs text-destructive/90 bg-destructive/5 rounded-md p-2 border border-destructive/20"
+                        >
+                          <span className="font-medium">{error.property}:</span>{' '}
+                          <span>{error.message}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Schema Validation Warnings */}
+            {(() => {
+              const schemaWarnings: string[] = [];
+              
+              // Check for arrays without items
+              const checkSchema = (schema: RJSFSchema, path: string = 'root'): void => {
+                if (schema.type === 'array' && !schema.items) {
+                  schemaWarnings.push(`${path}: Array is missing items definition`);
+                }
+                
+                if (schema.properties) {
+                  Object.entries(schema.properties).forEach(([key, prop]) => {
+                    checkSchema(prop as RJSFSchema, path === 'root' ? key : `${path}.${key}`);
+                  });
+                }
+              };
+              
+              checkSchema(schema);
+              
+              return schemaWarnings.length > 0 ? (
+                <div className="rounded-xl border border-amber-500/50 bg-amber-500/10 shadow-sm p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-semibold text-amber-600 dark:text-amber-500 mb-2">
+                        Schema Warnings ({schemaWarnings.length})
+                      </h3>
+                      <div className="space-y-1.5">
+                        {schemaWarnings.map((warning, index) => (
+                          <div
+                            key={index}
+                            className="text-xs text-amber-700 dark:text-amber-400 bg-amber-500/5 rounded-md p-2 border border-amber-500/20"
+                          >
+                            {warning}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null;
+            })()}
+            
+            <div className="rounded-xl border border-border/50 bg-card shadow-sm p-6">
+              <ThemeProvider theme={muiTheme}>
+                <Form
+                  schema={schema}
+                  uiSchema={uiSchema}
+                  validator={validator}
+                  formData={formData}
+                  onChange={handleFormChange}
+                  onSubmit={console.log}
+                />
+              </ThemeProvider>
+            </div>
           </div>
         ) : (
           <Tabs defaultValue="schema">

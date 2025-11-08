@@ -54,6 +54,7 @@ export function FieldConfigPanel({
     description: "",
     key: "",
     required: false,
+    default: undefined as any,
   });
   const [nodeConfig, setNodeConfig] = useState<FieldNodeWithConfig | null>(
     null
@@ -74,6 +75,7 @@ export function FieldConfigPanel({
         description: node.description || "",
         key: node.key,
         required: node.required || false,
+        default: node.default !== undefined ? node.default : undefined,
       });
       // Reset manual edit flag when node changes
       setKeyWasManuallyEdited(false);
@@ -142,6 +144,22 @@ export function FieldConfigPanel({
     // Get the current node path before updating
     const oldPath = nodeConfig ? getNodePath(graph, nodeId) : "";
 
+    // Parse default value based on type
+    let parsedDefault: any = undefined;
+    if (formData.default !== undefined && formData.default !== '') {
+      if (nodeConfig.type === 'number') {
+        parsedDefault = formData.default === '' ? undefined : Number(formData.default);
+        if (isNaN(parsedDefault)) {
+          toast.error("Default value must be a valid number");
+          return;
+        }
+      } else if (nodeConfig.type === 'boolean') {
+        parsedDefault = formData.default === 'true' || formData.default === true;
+      } else {
+        parsedDefault = formData.default;
+      }
+    }
+
     // Update the node with all accumulated changes
     const updatedNode = {
       ...nodeConfig,
@@ -149,6 +167,7 @@ export function FieldConfigPanel({
       description: formData.description || undefined,
       key: formattedKey,
       required: formData.required,
+      default: parsedDefault,
     };
 
     updateNode(nodeId, updatedNode);
@@ -185,6 +204,7 @@ export function FieldConfigPanel({
         description: initialNode.description || "",
         key: initialNode.key,
         required: initialNode.required || false,
+        default: initialNode.default !== undefined ? initialNode.default : undefined,
       });
     }
     onCancel?.();
@@ -708,6 +728,59 @@ export function FieldConfigPanel({
               </Label>
             </div>
           </div>
+        </div>
+
+        {/* Default Value */}
+        <div className="space-y-1.5">
+          <Label className="text-xs">Default Value</Label>
+          {nodeConfig.type === 'boolean' ? (
+            <Select
+              value={formData.default === undefined ? '' : String(formData.default)}
+              onValueChange={(value) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  default: value === '' ? undefined : value === 'true',
+                }))
+              }
+            >
+              <SelectTrigger className="h-7 text-sm">
+                <SelectValue placeholder="No default" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">No default</SelectItem>
+                <SelectItem value="true">True</SelectItem>
+                <SelectItem value="false">False</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : nodeConfig.type === 'number' ? (
+            <Input
+              type="number"
+              value={formData.default === undefined ? '' : String(formData.default)}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  default: e.target.value === '' ? undefined : e.target.value,
+                }))
+              }
+              placeholder="Enter default number"
+              className="h-7 text-sm"
+            />
+          ) : (
+            <Input
+              value={formData.default === undefined ? '' : String(formData.default)}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  default: e.target.value === '' ? undefined : e.target.value,
+                }))
+              }
+              placeholder="Enter default value"
+              className="h-7 text-sm"
+            />
+          )}
+          <p className="text-xs text-muted-foreground">
+            This value will be pre-filled in the form
+          </p>
         </div>
       </div>
 
