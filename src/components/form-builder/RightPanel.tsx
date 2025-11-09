@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Settings2, Eye, Code, X } from "lucide-react";
+import { Settings2, Eye, Code } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PreviewPanel } from "./preview-panel";
 import { FieldConfigPanel } from "./field-config-panel";
@@ -137,24 +137,15 @@ export function RightPanel({ selectedNodeId, onFieldDeselect }: RightPanelProps)
             </TabsList>
           </div>
           
-          {/* Close button when in config mode */}
+          {/* ESC hint when in config mode - Cancel button handles closing */}
           {selectedNodeId && activeTab === "config" && (
-            <div className="px-4 pb-3 flex items-center justify-between">
+            <div className="px-4 pb-3 flex items-center justify-center">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <kbd className="px-1.5 py-0.5 text-xs font-semibold text-muted-foreground bg-muted border border-border rounded">
                   ESC
                 </kbd>
-                <span>to close</span>
+                <span>to cancel</span>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleDeselect}
-                className="h-7 gap-1.5 text-xs hover:bg-muted/80 transition-colors"
-              >
-                <X className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Close</span>
-              </Button>
             </div>
           )}
         </div>

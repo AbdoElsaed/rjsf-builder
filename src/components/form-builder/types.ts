@@ -6,16 +6,21 @@ export interface DraggedItem {
 }
 
 export interface FormNodeProps {
-    nodeId: string;
-    selectedNodeId: string | null;
-    onSelect: (nodeId: string | null) => void;
-    isDragging?: boolean;
-    draggedItem?: DraggedItem | null;
-    activeDropZone?: string | null;
-    dropPreview?: {
-        targetId: string;
-        relationshipType: 'child' | 'then' | 'else';
-        canDrop: boolean;
-    } | null;
-    onRemove?: () => void;
-} 
+  nodeId: string;
+  selectedNodeId: string | null;
+  onSelect: (nodeId: string | null) => void;
+  isDragging?: boolean;
+  draggedItem?: DraggedItem | null;
+  activeDropZone?: string | null;
+  dropPreview?: {
+    targetId: string;
+    relationshipType: 'child' | 'then' | 'else';
+    canDrop: boolean;
+  } | null;
+  onRemove?: () => void;
+  // For virtual scrolling: external expand/collapse control
+  externalExpandState?: {
+    isExpanded: boolean;
+    onToggle: () => void;
+  };
+}

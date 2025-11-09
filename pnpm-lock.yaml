@@ -74,6 +74,9 @@ dependencies:
   '@tailwindcss/vite':
     specifier: ^4.1.10
     version: 4.1.10(vite@7.0.0)
+  '@tanstack/react-virtual':
+    specifier: ^3.13.12
+    version: 3.13.12(react-dom@19.1.0)(react@19.1.0)
   '@types/uuid':
     specifier: ^10.0.0
     version: 10.0.0
@@ -2328,6 +2331,21 @@ packages:
       '@tailwindcss/oxide': 4.1.10
       tailwindcss: 4.1.10
       vite: 7.0.0(@types/node@24.0.4)
+    dev: false
+
+  /@tanstack/react-virtual@3.13.12(react-dom@19.1.0)(react@19.1.0):
+    resolution: {integrity: sha512-Gd13QdxPSukP8ZrkbgS2RwoZseTTbQPLnQEn7HY/rqtM+8Zt95f7xKC7N0EsKs7aoz0WzZ+fditZux+F8EzYxA==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+      react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+    dependencies:
+      '@tanstack/virtual-core': 3.13.12
+      react: 19.1.0
+      react-dom: 19.1.0(react@19.1.0)
+    dev: false
+
+  /@tanstack/virtual-core@3.13.12:
+    resolution: {integrity: sha512-1YBOJfRHV4sXUmWsFSf5rQor4Ss82G8dQWLRbnk3GA4jeP8hQt1hxXh0tmflpC0dz3VgEv/1+qwPyLeWkQuPFA==}
     dev: false
 
   /@types/babel__core@7.20.5:

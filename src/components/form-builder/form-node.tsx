@@ -94,6 +94,7 @@ const FormNodeComponent = function FormNode({
   activeDropZone = null,
   dropPreview = null,
   onRemove,
+  externalExpandState,
 }: FormNodeProps) {
   const { graph, removeNode, getNode, reorderNode } = useSchemaGraphStore();
   const { expandTrigger, collapseTrigger } = useExpandContext();
@@ -104,9 +105,8 @@ const FormNodeComponent = function FormNode({
   const lastExpandTriggerRef = useRef(expandTrigger);
   const lastCollapseTriggerRef = useRef(collapseTrigger);
   
-  // Initialize isOpen based on current trigger state (for newly rendered children)
-  // If collapseTrigger is more recent, start closed; otherwise start open
-  const [isOpen, setIsOpen] = useState(() => {
+  // Use external expand state if provided (for virtual scrolling), otherwise manage internally
+  const [internalIsOpen, setInternalIsOpen] = useState(() => {
     // If collapse was triggered more recently than expand, start closed
     if (collapseTrigger > expandTrigger) {
       return false;
@@ -114,6 +114,11 @@ const FormNodeComponent = function FormNode({
     // Otherwise start open (default)
     return true;
   });
+  
+  const isOpen = externalExpandState?.isExpanded ?? internalIsOpen;
+  const setIsOpen = externalExpandState?.onToggle 
+    ? () => externalExpandState.onToggle() 
+    : setInternalIsOpen;
   
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   
@@ -123,21 +128,26 @@ const FormNodeComponent = function FormNode({
   }, [selectedNodeId, nodeId]);
 
   // Listen to expand/collapse triggers and update local state recursively
+  // Only if not using external state (virtual scrolling manages this separately)
   useEffect(() => {
+    if (externalExpandState) return; // Skip if external state is managing expand/collapse
+    
     if (expandTrigger > lastExpandTriggerRef.current) {
-      setIsOpen(true);
+      setInternalIsOpen(true);
       lastExpandTriggerRef.current = expandTrigger;
       // Note: Children will also receive this trigger via context and expand themselves
     }
-  }, [expandTrigger]);
+  }, [expandTrigger, externalExpandState]);
 
   useEffect(() => {
+    if (externalExpandState) return; // Skip if external state is managing expand/collapse
+    
     if (collapseTrigger > lastCollapseTriggerRef.current) {
-      setIsOpen(false);
+      setInternalIsOpen(false);
       lastCollapseTriggerRef.current = collapseTrigger;
       // Note: Children will also receive this trigger via context and collapse themselves
     }
-  }, [collapseTrigger]);
+  }, [collapseTrigger, externalExpandState]);
   
   // Get node - must be called before hooks
   const node = getNode(nodeId);
@@ -790,7 +800,8 @@ const FormNodeComponent = function FormNode({
           </div>
 
           {/* Optimized: Use nodeType instead of node.type */}
-          {(nodeType === "object" || nodeType === "array") && (
+          {/* Don't render children in virtual scrolling mode - they're handled by the flattened tree */}
+          {!externalExpandState && (nodeType === "object" || nodeType === "array") && (
             <CollapsibleContent>
               <div className={nestedDropZoneClasses}>
                 {childIds.length > 0 ? (
@@ -900,6 +911,7 @@ export const FormNode = memo(FormNodeComponent, (prevProps, nextProps) => {
     prevProps.draggedItem?.type === nextProps.draggedItem?.type &&
     prevProps.dropPreview?.targetId === nextProps.dropPreview?.targetId &&
     prevProps.dropPreview?.relationshipType === nextProps.dropPreview?.relationshipType &&
-    prevProps.dropPreview?.canDrop === nextProps.dropPreview?.canDrop
+    prevProps.dropPreview?.canDrop === nextProps.dropPreview?.canDrop &&
+    prevProps.externalExpandState?.isExpanded === nextProps.externalExpandState?.isExpanded
   );
 });
