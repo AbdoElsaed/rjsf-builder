@@ -118,14 +118,29 @@ function processSchema(
     return processRef(schema, parentId, schemaKey, graph);
   }
   
-  // Handle allOf/anyOf/oneOf
-  if (schema.allOf || schema.anyOf || schema.oneOf) {
-    return processConditionalGroup(schema, parentId, schemaKey, graph);
-  }
+  // CRITICAL FIX: Check if this is an object/array with properties/items AND allOf/anyOf/oneOf
+  // If so, import it as an object/array first, then add conditionals as children
+  const hasType = schema.type && !Array.isArray(schema.type);
+  const hasProperties = schema.properties && Object.keys(schema.properties).length > 0;
+  const hasItems = schema.items;
+  const hasConditionals = schema.allOf || schema.anyOf || schema.oneOf || schema.if;
   
-  // Handle if/then/else (legacy)
-  if (schema.if) {
-    return processIfThenElse(schema, parentId, schemaKey, graph);
+  const isObjectWithConditionals = hasType && (schema.type === 'object' || schema.type === 'array') && hasConditionals;
+  const hasStructure = hasProperties || hasItems;
+  
+  // If it's an object/array with both structure AND conditionals, import as object/array first
+  if (!isObjectWithConditionals || !hasStructure) {
+    // Handle pure conditionals (no type or properties)
+    if (!hasType && hasConditionals) {
+      // Pure conditional group - check allOf/anyOf/oneOf first
+      if (schema.allOf || schema.anyOf || schema.oneOf) {
+        return processConditionalGroup(schema, parentId, schemaKey, graph);
+      }
+      // Handle if/then/else (legacy)
+      if (schema.if) {
+        return processIfThenElse(schema, parentId, schemaKey, graph);
+      }
+    }
   }
   
   // Determine node type
@@ -355,35 +370,70 @@ function processConditionalBranch(
     return processRef(branchSchema, parentId, `${branchType}_branch`, graph);
   }
   
-  // Create branch node
-  const branchNode: Omit<SchemaNode, 'id'> = {
-    key: `${branchType}_branch`,
-    type: 'object',
-    title: `${branchType.charAt(0).toUpperCase() + branchType.slice(1)} Branch`,
-  };
+  // CRITICAL FIX: Import branch properties directly without creating wrapper objects
+  // The compiler will handle wrapping them when needed
+  let resultGraph = graph;
+  const branchNodeIds: string[] = [];
   
-  const newGraph = addNode(graph, branchNode, parentId);
-  const branchId = Array.from(newGraph.nodes.keys())
-    .find(id => id !== parentId && newGraph.nodes.get(id)?.key === `${branchType}_branch`);
-  
-  if (!branchId) {
-    throw new Error(`Failed to create ${branchType} branch node`);
-  }
-  
-  // Create edge with appropriate type
-  let resultGraph = addEdge(newGraph, parentId, branchId, branchType);
-  
-  // Process branch properties
+  // Process branch properties directly - each becomes a child with the appropriate edge type
   if (branchSchema.properties) {
-    resultGraph = importProperties(resultGraph, branchSchema.properties, branchId, branchSchema.required);
+    Object.entries(branchSchema.properties).forEach(([key, propSchema]) => {
+      const result = processSchema(propSchema as ExtendedRJSFSchema, parentId, key, resultGraph);
+      resultGraph = result.graph;
+      
+      // The node was added with 'child' edge, we need to change it to 'then' or 'else' edge
+      // Find the edge that was just created
+      const childEdge = Array.from(resultGraph.edges.values()).find(
+        edge => edge.targetId === result.nodeId && edge.sourceId === parentId && edge.type === 'child'
+      );
+      
+      if (childEdge) {
+        // Remove the child edge
+        resultGraph = {
+          ...resultGraph,
+          edges: new Map(resultGraph.edges),
+          parentIndex: new Map(resultGraph.parentIndex),
+          childrenIndex: new Map(resultGraph.childrenIndex),
+          edgeTypeIndex: new Map(resultGraph.edgeTypeIndex),
+        };
+        
+        resultGraph.edges.delete(childEdge.id);
+        
+        // Update indices to remove child relationship
+        const childrenSet = resultGraph.childrenIndex.get(parentId);
+        if (childrenSet) {
+          const newChildrenSet = new Set(childrenSet);
+          newChildrenSet.delete(result.nodeId);
+          resultGraph.childrenIndex.set(parentId, newChildrenSet);
+        }
+        
+        resultGraph.parentIndex.delete(result.nodeId);
+        
+        const childEdgeTypeSet = resultGraph.edgeTypeIndex.get('child');
+        if (childEdgeTypeSet) {
+          const newSet = new Set(childEdgeTypeSet);
+          newSet.delete(childEdge.id);
+          resultGraph.edgeTypeIndex.set('child', newSet);
+        }
+        
+        // Add the correct edge type (then or else)
+        resultGraph = addEdge(resultGraph, parentId, result.nodeId, branchType);
+      }
+      
+      branchNodeIds.push(result.nodeId);
+    });
   }
   
   // Handle nested conditionals in branch
   if (branchSchema.allOf) {
-    resultGraph = importConditionalGroups(resultGraph, branchSchema.allOf, branchId, 'allOf');
+    resultGraph = importConditionalGroups(resultGraph, branchSchema.allOf, parentId, 'allOf');
   }
   
-  return { graph: resultGraph, nodeId: branchId };
+  // Return the first node ID as the representative (for compatibility)
+  // In the new architecture, branches are represented by multiple nodes with then/else edges
+  const representativeId = branchNodeIds[0] || parentId;
+  
+  return { graph: resultGraph, nodeId: representativeId };
 }
 
 /**

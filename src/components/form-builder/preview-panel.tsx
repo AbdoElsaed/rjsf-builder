@@ -13,8 +13,13 @@ import type { IChangeEvent } from "@rjsf/core";
 import { useTheme } from "@/components/theme-provider";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { toast } from "sonner";
-import { Pencil, X, Check, Copy, AlertCircle, AlertTriangle } from "lucide-react";
+import { Pencil, X, Check, Copy, AlertCircle, AlertTriangle, Download, Upload } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { downloadJsonFile, generateFilename } from "@/lib/export/file-exporter";
+import { importJsonFile } from "@/lib/import/file-importer";
+import { validateImportedSchema } from "@/lib/import/import-validator";
+import { ImportPreviewDialog } from "./import-preview-dialog";
+import type { NestedUiSchema } from "@/lib/store/ui-schema";
 
 // Create the Material-UI form component
 const Form = withTheme(RJSFShadcnTheme);
@@ -24,10 +29,15 @@ interface PreviewPanelProps {
 }
 
 export function PreviewPanel({ showPreview }: PreviewPanelProps) {
-  const { compileToJsonSchema, setSchemaFromJson, graph } = useSchemaGraphStore();
+  const { compileToJsonSchema, setSchemaFromJson, importSchema, graph } = useSchemaGraphStore();
   const { formData, updateFormData, migrateFormData } = useFormDataStore();
   const { uiSchema, updateUiSchema } = useUiSchemaStore();
   const { theme: colorMode } = useTheme();
+  
+  // Import dialog state
+  const [importPreviewOpen, setImportPreviewOpen] = useState(false);
+  const [importData, setImportData] = useState<{ schema: unknown; validation: ReturnType<typeof validateImportedSchema> } | null>(null);
+  const [importMode, setImportMode] = useState<'replace' | 'merge'>('replace');
 
   // Memoize schema compilation - only recompile when graph actually changes
   // Note: compileToJsonSchema uses WeakMap cache internally for performance
@@ -265,6 +275,76 @@ export function PreviewPanel({ showPreview }: PreviewPanelProps) {
     });
   };
 
+  // Export handlers
+  const handleExportSchema = () => {
+    const schemaToExport = editMode
+      ? JSON.parse(editedSchema)
+      : schema;
+    const filename = generateFilename('schema');
+    downloadJsonFile(schemaToExport, filename);
+    toast.success("Schema exported successfully");
+  };
+
+  const handleExportUiSchema = () => {
+    const uiSchemaToExport = uiSchemaEditMode
+      ? JSON.parse(editedUiSchema)
+      : uiSchema;
+    const filename = generateFilename('ui-schema');
+    downloadJsonFile(uiSchemaToExport, filename);
+    toast.success("UI Schema exported successfully");
+  };
+
+  // Import handlers
+  const handleImportSchema = async () => {
+    try {
+      const data = await importJsonFile();
+      
+      // Check if it's a combined export or just a schema
+      let schemaToImport: unknown;
+      if (typeof data === 'object' && data !== null && 'schema' in data) {
+        // Combined export format
+        const combined = data as { schema: unknown; uiSchema?: unknown };
+        schemaToImport = combined.schema;
+        
+        // Optionally import UI schema if present
+        if (combined.uiSchema) {
+          try {
+            updateUiSchema(combined.uiSchema as NestedUiSchema);
+          } catch (error) {
+            console.warn('Failed to import UI schema:', error);
+          }
+        }
+      } else {
+        // Just a schema
+        schemaToImport = data;
+      }
+
+      const validation = validateImportedSchema(schemaToImport);
+      setImportData({ schema: schemaToImport, validation });
+      setImportMode('replace');
+      setImportPreviewOpen(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to import file';
+      toast.error(`Import failed: ${message}`);
+    }
+  };
+
+  const handleConfirmImport = () => {
+    if (!importData || !importData.validation.valid) {
+      return;
+    }
+
+    try {
+      importSchema(importData.schema as RJSFSchema, importMode);
+      toast.success("Schema imported successfully");
+      setImportPreviewOpen(false);
+      setImportData(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to import schema';
+      toast.error(`Import failed: ${message}`);
+    }
+  };
+
   const handleFormChange = (e: IChangeEvent<Record<string, JSONValue>>) => {
     if (e.formData) {
       // Update form data without triggering migration (this is a direct user edit)
@@ -409,6 +489,24 @@ export function PreviewPanel({ showPreview }: PreviewPanelProps) {
                     </>
                   ) : (
                     <>
+                      <Tooltip title="Import Schema">
+                        <IconButton
+                          size="small"
+                          color="inherit"
+                          onClick={handleImportSchema}
+                        >
+                          <Upload className="h-4 w-4" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Export Schema">
+                        <IconButton
+                          size="small"
+                          color="inherit"
+                          onClick={handleExportSchema}
+                        >
+                          <Download className="h-4 w-4" />
+                        </IconButton>
+                      </Tooltip>
                       <Tooltip title="Copy Schema">
                         <IconButton
                           size="small"
@@ -481,6 +579,36 @@ export function PreviewPanel({ showPreview }: PreviewPanelProps) {
                     </>
                   ) : (
                     <>
+                      <Tooltip title="Import UI Schema">
+                        <IconButton
+                          size="small"
+                          color="inherit"
+                          onClick={async () => {
+                            try {
+                              const data = await importJsonFile();
+                              const uiSchemaData = typeof data === 'object' && data !== null && 'uiSchema' in data
+                                ? (data as { uiSchema: unknown }).uiSchema
+                                : data;
+                              updateUiSchema(uiSchemaData as NestedUiSchema);
+                              toast.success("UI Schema imported successfully");
+                            } catch (error) {
+                              const message = error instanceof Error ? error.message : 'Failed to import file';
+                              toast.error(`Import failed: ${message}`);
+                            }
+                          }}
+                        >
+                          <Upload className="h-4 w-4" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Export UI Schema">
+                        <IconButton
+                          size="small"
+                          color="inherit"
+                          onClick={handleExportUiSchema}
+                        >
+                          <Download className="h-4 w-4" />
+                        </IconButton>
+                      </Tooltip>
                       <Tooltip title="Copy UI Schema">
                         <IconButton
                           size="small"
@@ -595,6 +723,18 @@ export function PreviewPanel({ showPreview }: PreviewPanelProps) {
           </Tabs>
         )}
       </div>
+
+      {/* Import Preview Dialog */}
+      {importData && (
+        <ImportPreviewDialog
+          open={importPreviewOpen}
+          onOpenChange={setImportPreviewOpen}
+          schema={importData.schema}
+          validation={importData.validation}
+          onConfirm={handleConfirmImport}
+          mode={importMode}
+        />
+      )}
     </ScrollArea>
   );
 }

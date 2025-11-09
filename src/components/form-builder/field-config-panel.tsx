@@ -30,6 +30,7 @@ import { useState, useEffect } from "react";
 import { getNodePath, titleToKey, generateUniqueKey } from "@/lib/utils";
 import { WidgetSelector } from "./widget-selector";
 import { getChildren } from "@/lib/graph/schema-graph";
+import type { SchemaNode } from "@/lib/graph/schema-graph";
 
 interface FieldConfigPanelProps {
   nodeId: string | null;
@@ -76,12 +77,21 @@ export function FieldConfigPanel({
       if (!node) return;
       setInitialNode(node);
       setNodeConfig(node);
+      // Extract default value, ensuring it's a primitive type
+      let defaultValue: string | number | boolean | undefined = undefined;
+      if (node.default !== undefined && node.default !== null) {
+        const defaultValueType = typeof node.default;
+        if (defaultValueType === 'string' || defaultValueType === 'number' || defaultValueType === 'boolean') {
+          defaultValue = node.default as string | number | boolean;
+        }
+      }
+
       setFormData({
         title: node.title,
         description: node.description || "",
         key: node.key,
         required: node.required || false,
-        default: node.default !== undefined ? node.default : undefined,
+        default: defaultValue,
       });
       // Reset manual edit flag when node changes
       setKeyWasManuallyEdited(false);
@@ -130,7 +140,7 @@ export function FieldConfigPanel({
     }
 
     // Check if the key is unique among siblings
-    const parentId = nodeConfig.parentId || 'root';
+    const parentId = graph.parentIndex.get(nodeId) || 'root';
     const parent = getNode(parentId);
     const siblings = parent ? getChildren(graph, parentId, 'child').map(n => n.id) : [];
     const hasDuplicateKey = siblings.some((siblingId) => {
@@ -167,23 +177,66 @@ export function FieldConfigPanel({
       }
     }
 
-    // Update the node with all accumulated changes
-    const updatedNode = {
-      ...nodeConfig,
+    // Get the CURRENT node from the graph (not local state) to preserve all properties
+    const currentNodeInGraph = graph.nodes.get(nodeId);
+    if (!currentNodeInGraph) {
+      toast.error("Node not found in graph");
+      return;
+    }
+
+    // Build the updates object with only the properties we're changing
+    // This ensures we preserve ALL existing properties (especially important for objects with children)
+    const updates: Partial<SchemaNode> = {
       title: formData.title,
       description: formData.description || undefined,
       key: formattedKey,
       required: formData.required,
       default: parsedDefault,
+      // Apply type-specific updates from nodeConfig (user may have changed these)
+      ...(nodeConfig.type === 'number' && {
+        minimum: nodeConfig.minimum,
+        maximum: nodeConfig.maximum,
+        multipleOf: nodeConfig.multipleOf,
+        exclusiveMinimum: nodeConfig.exclusiveMinimum,
+        exclusiveMaximum: nodeConfig.exclusiveMaximum,
+      }),
+      ...(nodeConfig.type === 'string' && {
+        minLength: nodeConfig.minLength,
+        maxLength: nodeConfig.maxLength,
+        pattern: nodeConfig.pattern,
+        format: nodeConfig.format,
+      }),
+      ...(nodeConfig.type === 'array' && {
+        minItems: nodeConfig.minItems,
+        maxItems: nodeConfig.maxItems,
+        uniqueItems: nodeConfig.uniqueItems,
+        additionalItems: nodeConfig.additionalItems,
+      }),
+      ...(nodeConfig.type === 'object' && {
+        minProperties: nodeConfig.minProperties,
+        maxProperties: nodeConfig.maxProperties,
+        additionalProperties: nodeConfig.additionalProperties,
+      }),
+      ...(nodeConfig.type === 'enum' && {
+        enum: nodeConfig.enum,
+        enumNames: nodeConfig.enumNames,
+      }),
+      // Update UI config if it exists
+      ...(nodeConfig.ui && { ui: nodeConfig.ui }),
     };
 
-    updateNode(nodeId, updatedNode);
+    // updateNode will merge these updates with the current node, preserving all other properties
+    updateNode(nodeId, updates);
 
-    // Create a copy of the updated schema
-    const newSchema = compileToJsonSchema() as RJSFSchema;
+    // CRITICAL: Get the NEW graph after update (Zustand updates are synchronous)
+    const updatedGraph = useSchemaGraphStore.getState().graph;
 
-    // Get the new node path after updating
-    const newPath = getNodePath(graph, nodeId);
+    // Create a copy of the updated schema using the UPDATED graph
+    const { compileToJsonSchema: compile } = useSchemaGraphStore.getState();
+    const newSchema = compile() as RJSFSchema;
+
+    // Get the new node path after updating - use the UPDATED graph
+    const newPath = getNodePath(updatedGraph, nodeId);
 
     // If the key has changed, migrate the form data and update UI schema path
     if (oldPath !== newPath) {
@@ -206,12 +259,22 @@ export function FieldConfigPanel({
     if (initialNode) {
       // Restore the initial node state
       setNodeConfig(initialNode);
+      
+      // Extract default value, ensuring it's a primitive type
+      let defaultValue: string | number | boolean | undefined = undefined;
+      if (initialNode.default !== undefined && initialNode.default !== null) {
+        const defaultValueType = typeof initialNode.default;
+        if (defaultValueType === 'string' || defaultValueType === 'number' || defaultValueType === 'boolean') {
+          defaultValue = initialNode.default as string | number | boolean;
+        }
+      }
+
       setFormData({
         title: initialNode.title,
         description: initialNode.description || "",
         key: initialNode.key,
         required: initialNode.required || false,
-        default: initialNode.default !== undefined ? initialNode.default : undefined,
+        default: defaultValue,
       });
     }
     onCancel?.();

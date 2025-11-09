@@ -181,12 +181,12 @@ function buildUiSchemaForNode(
     // But only use it if it's a valid RJSF widget
     const widget = widgetRegistry.getWidgetForField(node);
     if (widget && validRJSFWidgets.includes(widget.id)) {
-      fieldUiSchema['ui:widget'] = widget.id;
-      const existingOptions = node.ui?.['ui:options'] || {};
-      fieldUiSchema['ui:options'] = {
-        ...widget.defaultConfig,
-        ...existingOptions,
-      };
+    fieldUiSchema['ui:widget'] = widget.id;
+    const existingOptions = node.ui?.['ui:options'] || {};
+    fieldUiSchema['ui:options'] = {
+      ...widget.defaultConfig,
+      ...existingOptions,
+    };
     }
     // If widget is not a valid RJSF widget, don't set it - let RJSF use its default
   }
@@ -251,13 +251,13 @@ function buildUiSchemaForNode(
   // Only add UI schema entry if this is NOT a conditional block
   // Conditional blocks don't need UI schema - their children are processed separately
   if (!isConditionalBlock) {
-    // Always add field to UI schema if it has children or UI properties
-    // Even if empty, we need to maintain structure for nested fields
-    if (fieldPath && fieldPath !== 'root') {
-      setNestedValue(uiSchema, fieldPath.split('.'), fieldUiSchema);
-    } else if (Object.keys(fieldUiSchema).length > 0) {
-      // Root level - merge directly only if there's content
-      Object.assign(uiSchema, fieldUiSchema);
+  // Always add field to UI schema if it has children or UI properties
+  // Even if empty, we need to maintain structure for nested fields
+  if (fieldPath && fieldPath !== 'root') {
+    setNestedValue(uiSchema, fieldPath.split('.'), fieldUiSchema);
+  } else if (Object.keys(fieldUiSchema).length > 0) {
+    // Root level - merge directly only if there's content
+    Object.assign(uiSchema, fieldUiSchema);
     }
   }
 
@@ -268,10 +268,10 @@ function buildUiSchemaForNode(
   // because conditional blocks don't have regular children that should appear in UI schema
   // They only have then/else branches which are handled separately below
   if (!isConditionalBlock) {
-    children.forEach((child) => {
-      const childPath = fieldPath ? `${fieldPath}.${child.key}` : child.key;
-      buildUiSchemaForNode(graph, child, childPath, uiSchema, widgetRegistry);
-    });
+  children.forEach((child) => {
+    const childPath = fieldPath ? `${fieldPath}.${child.key}` : child.key;
+    buildUiSchemaForNode(graph, child, childPath, uiSchema, widgetRegistry);
+  });
   }
   
   // Handle conditional branches (then/else) separately if this is a conditional group or IF block

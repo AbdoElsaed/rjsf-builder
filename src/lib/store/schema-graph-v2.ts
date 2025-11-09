@@ -43,6 +43,7 @@ interface SchemaGraphState {
   moveNode: (nodeId: string, newParentId: string, edgeType?: EdgeType) => void;
   reorderNode: (nodeId: string, newIndex: number) => void;
   setSchemaFromJson: (inputSchema: RJSFSchema) => void;
+  importSchema: (inputSchema: RJSFSchema, mode: 'replace' | 'merge') => void;
   validateGraph: () => { valid: boolean; errors: string[] };
 
   // Compiler
@@ -131,6 +132,22 @@ export const useSchemaGraphStore = create<SchemaGraphState>((set, get) => {
       // Immediate UI schema regeneration for schema import
       const { regenerateFromGraph } = useUiSchemaStore.getState();
       regenerateFromGraph(newGraph);
+    },
+
+    importSchema: (inputSchema: RJSFSchema, mode: 'replace' | 'merge') => {
+      if (mode === 'replace') {
+        // Replace mode: clear current graph and import new schema
+        const newGraph = fromJsonSchema(inputSchema);
+        set({ graph: newGraph });
+        scheduleUiSchemaRegeneration(newGraph);
+      } else {
+        // Merge mode: combine existing graph with imported schema
+        // For now, merge mode just replaces (can be enhanced later)
+        // TODO: Implement proper merge logic that combines definitions and properties
+        const newGraph = fromJsonSchema(inputSchema);
+        set({ graph: newGraph });
+        scheduleUiSchemaRegeneration(newGraph);
+      }
     },
 
     validateGraph: () => {

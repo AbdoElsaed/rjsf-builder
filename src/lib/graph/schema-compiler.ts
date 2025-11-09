@@ -388,10 +388,20 @@ function compileConditionalGroup(
       };
     }
     
-    const combinedSchema: RJSFSchema = {
-      if: {
+    // Build the if clause - if only one condition, use it directly; otherwise combine
+    let ifClause: RJSFSchema;
+    if (combinedConditions.length === 1) {
+      // Single condition - use it directly without wrapping in allOf/anyOf/oneOf
+      ifClause = combinedConditions[0];
+    } else {
+      // Multiple conditions - combine using the group type
+      ifClause = {
         [node.type]: combinedConditions,
-      } as RJSFSchema,
+      } as RJSFSchema;
+    }
+    
+    const combinedSchema: RJSFSchema = {
+      if: ifClause,
       then: finalThenSchema,
     };
     
