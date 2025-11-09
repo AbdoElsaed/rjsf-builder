@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 
 interface ExpandContextType {
   triggerExpandAll: () => void;

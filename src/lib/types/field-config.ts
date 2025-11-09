@@ -1,4 +1,4 @@
-import type { JSONSchemaType } from "@/lib/store/schema-graph";
+import type { SchemaNodeType } from "@/lib/graph/schema-graph";
 import type { UiSchema } from "@/lib/store/ui-schema";
 
 // Common configuration options for all field types
@@ -103,7 +103,7 @@ export type FieldConfig =
     | IfBlockConfig;
 
 // Helper to get the appropriate configuration type based on field type
-export function getDefaultConfig(type: JSONSchemaType): FieldConfig {
+export function getDefaultConfig(type: SchemaNodeType): FieldConfig {
     switch (type) {
         case "string":
             return { type, title: "", ui: {} };

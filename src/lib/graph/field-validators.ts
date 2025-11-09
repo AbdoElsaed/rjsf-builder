@@ -67,10 +67,9 @@ export class FieldValidators {
         }
     }
 
-    private static validateArrayField(node: FieldNode, errors: string[]) {
-        if (node.children && node.children.length > 1) {
-            errors.push('Array fields can only have one child type');
-        }
+    private static validateArrayField(_node: FieldNode, _errors: string[]) {
+        // Array validation is handled by the graph structure (getChildren)
+        // This method is kept for potential future validations
     }
 
     private static validateEnumField(node: FieldNode, errors: string[]) {

@@ -251,6 +251,32 @@ Common issues and their solutions:
    - Check for unnecessary rerenders
    - Monitor state update frequency
 
+## Deployment
+
+### GitHub Pages
+
+The app is configured for automatic deployment to GitHub Pages via GitHub Actions.
+
+**Setup Instructions:**
+
+1. **Enable GitHub Pages in your repository:**
+   - Go to your repository settings on GitHub
+   - Navigate to "Pages" in the left sidebar
+   - Under "Source", select "GitHub Actions"
+
+2. **Push to main branch:**
+   - The workflow will automatically build and deploy on every push to `main`
+   - You can also manually trigger deployment via the "Actions" tab → "Deploy to GitHub Pages" → "Run workflow"
+
+3. **Access your deployed app:**
+   - Your app will be available at: `https://abdoelsaed.github.io/rjsf-builder/`
+   - The first deployment may take a few minutes
+
+**Build Configuration:**
+- Base path is automatically set to `/rjsf-builder/` for production builds
+- Development builds use `/` for local development
+- The workflow uses pnpm and Node.js 20
+
 ## Future Enhancements
 
 Planned improvements and features:

@@ -75,9 +75,21 @@ export function FormBuilderLayout({ showPreview = true }: FormBuilderLayoutProps
 
   const handleDragStart = (event: DragStartEvent) => {
     setIsDragging(true);
-    const activeData = event.active.data.current as DraggedItem;
+    const activeData = event.active.data.current as DraggedItem | undefined;
     // If dragging an existing node, ensure nodeId is set for reorder detection
-    const draggedItemData: DraggedItem = activeData ? { ...activeData } : {};
+    let draggedItemData: DraggedItem;
+    if (activeData) {
+      draggedItemData = { ...activeData };
+    } else if (typeof event.active.id === "string" && graph.nodes.has(event.active.id)) {
+      const node = getNode(event.active.id);
+      draggedItemData = {
+        type: node?.type || '',
+        nodeId: event.active.id,
+        label: node?.title,
+      };
+    } else {
+      draggedItemData = { type: '' };
+    }
     if (typeof event.active.id === "string" && graph.nodes.has(event.active.id)) {
       draggedItemData.nodeId = event.active.id;
       if (!draggedItemData.type) {

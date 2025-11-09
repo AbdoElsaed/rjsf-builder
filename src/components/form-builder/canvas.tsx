@@ -35,7 +35,7 @@ interface CanvasProps {
 }
 
 // Helper function to check if a field type can be dropped into a parent
-const canDropIntoParent = (childType: string, parentType?: string): boolean => {
+const canDropIntoParent = (_childType: string, parentType?: string): boolean => {
   if (!parentType) return true; // Root can accept any field
   if (parentType === "object") return true; // Objects can accept any field
   if (parentType === "array") return true; // Arrays can accept fields (with type consistency handled elsewhere)

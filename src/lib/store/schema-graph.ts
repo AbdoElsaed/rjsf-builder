@@ -1,7 +1,6 @@
 // Migrated to V2 - re-export everything from V2 store
 export {
   useSchemaGraphStore,
-  type SchemaGraph,
   type SchemaNode as FieldNode,
   type JSONSchemaType,
 } from './schema-graph-v2';
