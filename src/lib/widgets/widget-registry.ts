@@ -171,7 +171,7 @@ export class WidgetRegistry {
       name: 'YesNoWidget',
       displayName: 'Yes/No Select',
       description: 'Yes/No selection widget for enum fields',
-      compatibleTypes: ['enum', 'string'],
+      compatibleTypes: ['enum'], // Only for enum type, not string (RJSF doesn't support custom widgets for string)
       defaultConfig: {
         enumOptions: [
           { value: 'yes', label: 'نعم' },

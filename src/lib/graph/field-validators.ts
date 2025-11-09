@@ -33,7 +33,7 @@ export class FieldValidators {
                 this.validateNumberField(node, errors);
                 break;
             case 'array':
-                this.validateArrayField(node, errors);
+                this.validateArrayField();
                 break;
             case 'enum':
                 this.validateEnumField(node, errors);
@@ -67,7 +67,7 @@ export class FieldValidators {
         }
     }
 
-    private static validateArrayField(_node: FieldNode, _errors: string[]) {
+    private static validateArrayField() {
         // Array validation is handled by the graph structure (getChildren)
         // This method is kept for potential future validations
     }

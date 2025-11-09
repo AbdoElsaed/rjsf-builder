@@ -19,11 +19,10 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Button } from "@/components/ui/button";
-import { Eye, Code } from "lucide-react";
+// Eye and Code icons moved to RightPanel component
 import { FieldPalette } from "./field-palette";
 import { Canvas } from "./canvas";
-import { PreviewPanel } from "./preview-panel";
+import { RightPanel } from "./RightPanel";
 import { useSchemaGraphStore } from "@/lib/store/schema-graph";
 import { ExpandProvider } from "./expand-context";
 import type { JSONSchemaType } from "@/lib/store/schema-graph";
@@ -40,12 +39,7 @@ interface DraggedItem {
   definitionName?: string; // For component references
 }
 
-interface FormBuilderLayoutProps {
-  showPreview?: boolean;
-}
-
-export function FormBuilderLayout({ showPreview = true }: FormBuilderLayoutProps) {
-  const [localShowPreview, setLocalShowPreview] = useState(showPreview ?? true);
+export function FormBuilderLayout() {
   const [isDragging, setIsDragging] = useState(false);
   const [draggedItem, setDraggedItem] = useState<DraggedItem | null>(null);
   const [activeDropZone, setActiveDropZone] = useState<string | null>(null);
@@ -455,35 +449,16 @@ export function FormBuilderLayout({ showPreview = true }: FormBuilderLayoutProps
 
             <ResizableHandle withHandle />
 
-            {/* Preview/Schema Panel */}
+            {/* Right Panel - Config or Preview */}
             <ResizablePanel
               defaultSize={30}
               minSize={25}
-              className="bg-muted/30 backdrop-blur-sm relative"
+              className="relative"
             >
-              <div className="absolute right-4 top-4 z-10">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2 shadow-sm hover:shadow-md transition-shadow"
-                  onClick={() => setLocalShowPreview(!localShowPreview)}
-                >
-                  {localShowPreview ? (
-                    <>
-                      <Code className="h-4 w-4" />
-                      Show Schema
-                    </>
-                  ) : (
-                    <>
-                      <Eye className="h-4 w-4" />
-                      Show Preview
-                    </>
-                  )}
-                </Button>
-              </div>
-              <div className="h-full">
-                <PreviewPanel showPreview={localShowPreview} />
-              </div>
+              <RightPanel
+                selectedNodeId={selectedNodeId}
+                onFieldDeselect={() => setSelectedNodeId(null)}
+              />
             </ResizablePanel>
           </ResizablePanelGroup>
         </div>

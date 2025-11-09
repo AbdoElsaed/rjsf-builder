@@ -11,7 +11,7 @@ import { getChildren } from "@/lib/graph/schema-graph";
 import { useExpandContext } from "./expand-context";
 import { Button } from "@/components/ui/button";
 import { Bookmark, ChevronDown, ChevronRight } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface DraggedItem {
@@ -50,7 +50,7 @@ export function Canvas({
   activeDropZone,
   dropPreview,
 }: CanvasProps) {
-  const { graph, getAllDefinitions } = useSchemaGraphStore();
+  const { graph } = useSchemaGraphStore();
   const { triggerExpandAll, triggerCollapseAll } = useExpandContext();
   const [definitionsOpen, setDefinitionsOpen] = useState(true);
   const { setNodeRef, isOver } = useDroppable({
@@ -68,15 +68,37 @@ export function Canvas({
   );
   
   // Get all definitions for editing
-  // Depend on graph to ensure updates when definitions change
+  // Read directly from graph.definitions to ensure updates when definitions change
   const definitions = useMemo(() => {
-    const defs = getAllDefinitions();
-    return Array.from(defs.entries()).map(([name, node]) => ({
-      name,
-      nodeId: node.id,
-      node,
-    }));
-  }, [graph, getAllDefinitions]);
+    return Array.from(graph.definitions.entries())
+      .map(([name, nodeId]) => {
+        const node = graph.nodes.get(nodeId);
+        if (!node) return null;
+        return {
+          name,
+          nodeId: node.id,
+          node,
+        };
+      })
+      .filter((def): def is NonNullable<typeof def> => def !== null);
+  }, [graph]); // Depend on graph - it changes when definitions are added/removed
+  
+  // Track previous definitions count to detect new additions
+  const prevDefinitionsCountRef = useRef(definitions.length);
+  
+  // Auto-open definitions section when a new definition is added
+  useEffect(() => {
+    const prevCount = prevDefinitionsCountRef.current;
+    const currentCount = definitions.length;
+    
+    // If definitions went from 0 to > 0, or increased, auto-open
+    if ((prevCount === 0 && currentCount > 0) || (currentCount > prevCount && prevCount > 0)) {
+      setDefinitionsOpen(true);
+    }
+    
+    // Always update the ref to track current count
+    prevDefinitionsCountRef.current = currentCount;
+  }, [definitions.length]); // Depend on definitions.length to catch all changes
   
   // Handle expand/collapse all - one-time actions
   const handleExpandAll = () => {

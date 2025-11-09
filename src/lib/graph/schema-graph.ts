@@ -340,15 +340,67 @@ export function removeNode(
     newGraph.edges.delete(edgeId);
   });
   
-  // Remove node
-  newGraph.nodes.delete(nodeId);
-  
-  // Remove from definitions if it's a definition
+  // If this is a definition, check for references and remove them first
+  let definitionName: string | null = null;
   newGraph.definitions.forEach((defNodeId, defName) => {
     if (defNodeId === nodeId) {
-      newGraph.definitions.delete(defName);
+      definitionName = defName;
     }
   });
+  
+  // If deleting a definition, remove all ref nodes that reference it
+  if (definitionName) {
+    const refNodesToRemove: string[] = [];
+    newGraph.nodes.forEach((n, nId) => {
+      if (n.type === 'ref' && n.refTarget === definitionName) {
+        refNodesToRemove.push(nId);
+      }
+    });
+    
+    // Recursively remove all ref nodes (this will clean up their edges too)
+    refNodesToRemove.forEach(refNodeId => {
+      // Remove edges connected to ref node
+      const refEdgesToRemove: string[] = [];
+      newGraph.edges.forEach((edge, edgeId) => {
+        if (edge.sourceId === refNodeId || edge.targetId === refNodeId) {
+          refEdgesToRemove.push(edgeId);
+        }
+      });
+      
+      refEdgesToRemove.forEach(edgeId => {
+        const edge = newGraph.edges.get(edgeId)!;
+        
+        // Update indices
+        if (edge.type === 'child' && edge.targetId === refNodeId) {
+          newGraph.parentIndex.delete(refNodeId);
+        }
+        
+        const children = newGraph.childrenIndex.get(edge.sourceId);
+        if (children && edge.targetId === refNodeId) {
+          children.delete(refNodeId);
+          if (children.size === 0) {
+            newGraph.childrenIndex.delete(edge.sourceId);
+          }
+        }
+        
+        const edgeTypeSet = newGraph.edgeTypeIndex.get(edge.type);
+        if (edgeTypeSet) {
+          edgeTypeSet.delete(edgeId);
+        }
+        
+        newGraph.edges.delete(edgeId);
+      });
+      
+      // Remove ref node
+      newGraph.nodes.delete(refNodeId);
+    });
+    
+    // Remove definition from registry
+    newGraph.definitions.delete(definitionName);
+  }
+  
+  // Remove node
+  newGraph.nodes.delete(nodeId);
   
   return newGraph;
 }

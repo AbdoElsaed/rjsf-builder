@@ -3,34 +3,36 @@ import { useUiSchemaStore } from "@/lib/store/ui-schema";
 import { useFormDataStore } from "@/lib/store/form-data";
 import type {
   FieldConfig,
-  StringFieldConfig,
-  NumberFieldConfig,
-  BooleanFieldConfig,
-  ArrayFieldConfig,
-  ObjectFieldConfig,
-  EnumFieldConfig,
 } from "@/lib/types/field-config";
 import type { FieldNode } from "@/lib/store/schema-graph";
 import type { RJSFSchema } from "@rjsf/utils";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
-import { Check, X } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { Check, X, ChevronRight, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { getNodePath, titleToKey, generateUniqueKey } from "@/lib/utils";
-import { WidgetSelector } from "./widget-selector";
-import { getChildren } from "@/lib/graph/schema-graph";
+import { getChildren, getParent } from "@/lib/graph/schema-graph";
 import type { SchemaNode } from "@/lib/graph/schema-graph";
+import { cn } from "@/lib/utils";
+// Note: Field config components now used by ValidationSection, not directly here
+// Import smart property config system
+import {
+  getFieldTypeLabel,
+  getFieldTypeCategory,
+  shouldShowProperty,
+  isDataField,
+} from "@/lib/config/field-property-config";
+import {
+  getFieldTypeMetadata,
+  CATEGORY_CONFIG,
+} from "@/lib/config/field-type-metadata";
+// Import sectioned components
+import {
+  BasicPropertiesSection,
+  DataPropertiesSection,
+  ValidationSection,
+  UICustomizationSection,
+} from "./config-sections";
 
 interface FieldConfigPanelProps {
   nodeId: string | null;
@@ -46,6 +48,9 @@ export function FieldConfigPanel({
   onCancel,
 }: FieldConfigPanelProps) {
   const { graph, updateNode, compileToJsonSchema, getNode } = useSchemaGraphStore();
+  
+  // Expose header data for parent component (if needed)
+  // For now, we'll keep header in this component but make it sticky
   const { updateFieldUiSchema, removeFieldUiSchema } = useUiSchemaStore();
   const { migrateFormData } = useFormDataStore();
 
@@ -70,6 +75,46 @@ export function FieldConfigPanel({
     null
   );
   const [keyWasManuallyEdited, setKeyWasManuallyEdited] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // Build breadcrumb path
+  const breadcrumbPath = useMemo(() => {
+    if (!nodeId) return [];
+    const path: Array<{ id: string; title: string }> = [];
+    let currentId: string | null = nodeId;
+    const visited = new Set<string>();
+
+    while (currentId && currentId !== 'root') {
+      if (visited.has(currentId)) break;
+      visited.add(currentId);
+
+      const node = getNode(currentId);
+      if (!node) break;
+
+      path.unshift({ id: currentId, title: node.title || node.key || 'Field' });
+      const parent = getParent(graph, currentId);
+      currentId = parent?.id || null;
+    }
+
+    return path;
+  }, [nodeId, graph, getNode]);
+
+  // Smart breadcrumb: show first item, last 2-3 items, and "..." in between if needed
+  const getBreadcrumbDisplay = useMemo(() => {
+    if (breadcrumbPath.length <= 4) {
+      // Show all items if 4 or fewer
+      return { items: breadcrumbPath, showEllipsis: false };
+    }
+    
+    // Show first item, last 2 items, and ellipsis in between
+    const first = breadcrumbPath[0];
+    const last = breadcrumbPath.slice(-2);
+    return {
+      items: [first, ...last],
+      showEllipsis: true,
+      fullPath: breadcrumbPath.map(item => item.title).join(' > '),
+    };
+  }, [breadcrumbPath]);
 
   useEffect(() => {
     if (nodeId && graph.nodes.has(nodeId)) {
@@ -95,8 +140,46 @@ export function FieldConfigPanel({
       });
       // Reset manual edit flag when node changes
       setKeyWasManuallyEdited(false);
+      setHasUnsavedChanges(false);
     }
   }, [nodeId, graph.nodes]);
+
+  // Detect unsaved changes
+  useEffect(() => {
+    if (!initialNode || !nodeConfig) {
+      setHasUnsavedChanges(false);
+      return;
+    }
+
+    const hasChanges = 
+      formData.title !== initialNode.title ||
+      formData.description !== (initialNode.description || "") ||
+      formData.key !== initialNode.key ||
+      formData.required !== (initialNode.required || false) ||
+      formData.default !== (initialNode.default !== undefined && initialNode.default !== null 
+        ? (typeof initialNode.default === 'string' || typeof initialNode.default === 'number' || typeof initialNode.default === 'boolean'
+          ? initialNode.default 
+          : undefined)
+        : undefined) ||
+      JSON.stringify(nodeConfig.ui || {}) !== JSON.stringify(initialNode.ui || {}) ||
+      (nodeConfig.type === 'number' && (
+        nodeConfig.minimum !== initialNode.minimum ||
+        nodeConfig.maximum !== initialNode.maximum ||
+        nodeConfig.multipleOf !== initialNode.multipleOf
+      )) ||
+      (nodeConfig.type === 'string' && (
+        nodeConfig.minLength !== initialNode.minLength ||
+        nodeConfig.maxLength !== initialNode.maxLength ||
+        nodeConfig.pattern !== initialNode.pattern ||
+        nodeConfig.format !== initialNode.format
+      )) ||
+      (nodeConfig.type === 'enum' && (
+        JSON.stringify(nodeConfig.enum || []) !== JSON.stringify(initialNode.enum || []) ||
+        JSON.stringify(nodeConfig.enumNames || []) !== JSON.stringify(initialNode.enumNames || [])
+      ));
+
+    setHasUnsavedChanges(hasChanges);
+  }, [formData, nodeConfig, initialNode]);
 
   if (!nodeId || !graph.nodes.has(nodeId) || !nodeConfig) {
     return (
@@ -106,25 +189,7 @@ export function FieldConfigPanel({
     );
   }
 
-  // Type guard functions
-  const isStringField = (
-    node: FieldNodeWithConfig
-  ): node is FieldNode & StringFieldConfig => node.type === "string";
-  const isNumberField = (
-    node: FieldNodeWithConfig
-  ): node is FieldNode & NumberFieldConfig => node.type === "number";
-  const isBooleanField = (
-    node: FieldNodeWithConfig
-  ): node is FieldNode & BooleanFieldConfig => node.type === "boolean";
-  const isArrayField = (
-    node: FieldNodeWithConfig
-  ): node is FieldNode & ArrayFieldConfig => node.type === "array";
-  const isObjectField = (
-    node: FieldNodeWithConfig
-  ): node is FieldNode & ObjectFieldConfig => node.type === "object";
-  const isEnumField = (
-    node: FieldNodeWithConfig
-  ): node is FieldNode & EnumFieldConfig => node.type === "enum";
+  // Note: Type guards removed - now handled by ValidationSection component
 
   const handleSave = () => {
     // Validate and format the key
@@ -282,7 +347,7 @@ export function FieldConfigPanel({
 
   const handleConfigChange = (
     key: string,
-    value: string | number | boolean | string[] | undefined
+    value: unknown
   ) => {
     setNodeConfig((prev) => {
       if (!prev) return prev;
@@ -295,7 +360,7 @@ export function FieldConfigPanel({
 
   const handleUiConfigChange = (
     key: string,
-    value: string | number | boolean | Record<string, unknown> | undefined
+    value: unknown
   ) => {
     setNodeConfig((prev) => {
       if (!prev) return prev;
@@ -309,557 +374,216 @@ export function FieldConfigPanel({
     });
   };
 
-  const handleArrayOptionsChange = (key: string, value: boolean) => {
-    setNodeConfig((prev) => {
-      if (!prev) return prev;
-      const currentOptions = prev.ui?.["ui:options"] || {};
-      return {
-        ...prev,
-        ui: {
-          ...prev.ui,
-          "ui:options": {
-            ...currentOptions,
-            [key]: value,
-          },
-        },
-      } as FieldNodeWithConfig;
-    });
-  };
+  // Note: Old render methods removed - now handled by section components (ValidationSection, etc.)
 
-  const renderTypeSpecificConfig = () => {
-    switch (nodeConfig.type) {
-      case "string":
-        return renderStringConfig();
-      case "number":
-        return renderNumberConfig();
-      case "boolean":
-        return renderBooleanConfig();
-      case "array":
-        return renderArrayConfig();
-      case "object":
-        return renderObjectConfig();
-      case "enum":
-        return renderEnumConfig();
-      default:
-        return null;
-    }
-  };
-
-  const renderStringConfig = () => {
-    if (!isStringField(nodeConfig)) return null;
-    return (
-      <div className="space-y-2">
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Format</Label>
-            <Select
-              value={nodeConfig.format || "none"}
-              onValueChange={(value) =>
-                handleConfigChange(
-                  "format",
-                  value === "none" ? undefined : value
-                )
-              }
-            >
-              <SelectTrigger className="h-7 text-sm">
-                <SelectValue placeholder="Select format" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                <SelectItem value="email">Email</SelectItem>
-                <SelectItem value="uri">URI</SelectItem>
-                <SelectItem value="date">Date</SelectItem>
-                <SelectItem value="date-time">Date-Time</SelectItem>
-                <SelectItem value="time">Time</SelectItem>
-                <SelectItem value="ipv4">IPv4</SelectItem>
-                <SelectItem value="ipv6">IPv6</SelectItem>
-                <SelectItem value="hostname">Hostname</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <WidgetSelector
-            fieldType={nodeConfig.type}
-            value={nodeConfig.ui?.["ui:widget"]}
-            onValueChange={(value) => handleUiConfigChange("ui:widget", value)}
-            className="space-y-1.5"
-          />
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Min Length</Label>
-            <Input
-              type="number"
-              value={nodeConfig.minLength || ""}
-              onChange={(e) =>
-                handleConfigChange(
-                  "minLength",
-                  e.target.value ? parseInt(e.target.value) : undefined
-                )
-              }
-              className="h-7 text-sm"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Max Length</Label>
-            <Input
-              type="number"
-              value={nodeConfig.maxLength || ""}
-              onChange={(e) =>
-                handleConfigChange(
-                  "maxLength",
-                  e.target.value ? parseInt(e.target.value) : undefined
-                )
-              }
-              className="h-7 text-sm"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Pattern</Label>
-            <Input
-              value={nodeConfig.pattern || ""}
-              onChange={(e) =>
-                handleConfigChange("pattern", e.target.value || undefined)
-              }
-              placeholder="Regex"
-              className="h-7 text-sm"
-            />
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderNumberConfig = () => {
-    if (!isNumberField(nodeConfig)) return null;
-    return (
-      <div className="space-y-2">
-        <div className="grid grid-cols-3 gap-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Minimum</Label>
-            <Input
-              type="number"
-              value={nodeConfig.minimum || ""}
-              onChange={(e) =>
-                handleConfigChange(
-                  "minimum",
-                  e.target.value ? parseFloat(e.target.value) : undefined
-                )
-              }
-              className="h-7 text-sm"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Maximum</Label>
-            <Input
-              type="number"
-              value={nodeConfig.maximum || ""}
-              onChange={(e) =>
-                handleConfigChange(
-                  "maximum",
-                  e.target.value ? parseFloat(e.target.value) : undefined
-                )
-              }
-              className="h-7 text-sm"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Multiple Of</Label>
-            <Input
-              type="number"
-              value={nodeConfig.multipleOf || ""}
-              onChange={(e) =>
-                handleConfigChange(
-                  "multipleOf",
-                  e.target.value ? parseFloat(e.target.value) : undefined
-                )
-              }
-              className="h-7 text-sm"
-            />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <WidgetSelector
-            fieldType={nodeConfig.type}
-            value={nodeConfig.ui?.["ui:widget"]}
-            onValueChange={(value) => handleUiConfigChange("ui:widget", value)}
-            className="space-y-1.5"
-          />
-        </div>
-      </div>
-    );
-  };
-
-  const renderBooleanConfig = () => {
-    if (!isBooleanField(nodeConfig)) return null;
-    return (
-      <div className="space-y-2">
-        <WidgetSelector
-          fieldType={nodeConfig.type}
-          value={nodeConfig.ui?.["ui:widget"]}
-          onValueChange={(value) => handleUiConfigChange("ui:widget", value)}
-          className="space-y-1.5"
-        />
-      </div>
-    );
-  };
-
-  const renderArrayConfig = () => {
-    if (!isArrayField(nodeConfig)) return null;
-    return (
-      <div className="space-y-2">
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Min Items</Label>
-            <Input
-              type="number"
-              value={nodeConfig.minItems || ""}
-              onChange={(e) =>
-                handleConfigChange(
-                  "minItems",
-                  e.target.value ? parseInt(e.target.value) : undefined
-                )
-              }
-              className="h-7 text-sm"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Max Items</Label>
-            <Input
-              type="number"
-              value={nodeConfig.maxItems || ""}
-              onChange={(e) =>
-                handleConfigChange(
-                  "maxItems",
-                  e.target.value ? parseInt(e.target.value) : undefined
-                )
-              }
-              className="h-7 text-sm"
-            />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="flex items-center gap-1.5">
-            <Switch
-              id="uniqueItems"
-              checked={nodeConfig.uniqueItems || false}
-              onCheckedChange={(checked) =>
-                handleConfigChange("uniqueItems", checked)
-              }
-              className="scale-75"
-            />
-            <Label htmlFor="uniqueItems" className="text-xs">
-              Unique Items
-            </Label>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Switch
-              id="additionalItems"
-              checked={nodeConfig.additionalItems || false}
-              onCheckedChange={(checked) =>
-                handleConfigChange("additionalItems", checked)
-              }
-              className="scale-75"
-            />
-            <Label htmlFor="additionalItems" className="text-xs">
-              Additional Items
-            </Label>
-          </div>
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-          <div className="flex items-center gap-1.5">
-            <Switch
-              id="addable"
-              checked={nodeConfig.ui?.["ui:options"]?.addable ?? true}
-              onCheckedChange={(checked) =>
-                handleArrayOptionsChange("addable", checked)
-              }
-              className="scale-75"
-            />
-            <Label htmlFor="addable" className="text-xs">
-              Add
-            </Label>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Switch
-              id="orderable"
-              checked={nodeConfig.ui?.["ui:options"]?.orderable ?? true}
-              onCheckedChange={(checked) =>
-                handleArrayOptionsChange("orderable", checked)
-              }
-              className="scale-75"
-            />
-            <Label htmlFor="orderable" className="text-xs">
-              Order
-            </Label>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Switch
-              id="removable"
-              checked={nodeConfig.ui?.["ui:options"]?.removable ?? true}
-              onCheckedChange={(checked) =>
-                handleArrayOptionsChange("removable", checked)
-              }
-              className="scale-75"
-            />
-            <Label htmlFor="removable" className="text-xs">
-              Remove
-            </Label>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderObjectConfig = () => {
-    if (!isObjectField(nodeConfig)) return null;
-    return (
-      <div className="space-y-2">
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Min Properties</Label>
-            <Input
-              type="number"
-              value={nodeConfig.minProperties || ""}
-              onChange={(e) =>
-                handleConfigChange(
-                  "minProperties",
-                  e.target.value ? parseInt(e.target.value) : undefined
-                )
-              }
-              className="h-7 text-sm"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Max Properties</Label>
-            <Input
-              type="number"
-              value={nodeConfig.maxProperties || ""}
-              onChange={(e) =>
-                handleConfigChange(
-                  "maxProperties",
-                  e.target.value ? parseInt(e.target.value) : undefined
-                )
-              }
-              className="h-7 text-sm"
-            />
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Switch
-            id="additionalProperties"
-            checked={nodeConfig.additionalProperties || false}
-            onCheckedChange={(checked) =>
-              handleConfigChange("additionalProperties", checked)
-            }
-            className="scale-75"
-          />
-          <Label htmlFor="additionalProperties" className="text-xs">
-            Additional Properties
-          </Label>
-        </div>
-      </div>
-    );
-  };
-
-  const renderEnumConfig = () => {
-    if (!isEnumField(nodeConfig)) return null;
-    return (
-      <div className="space-y-2">
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Options (one per line)</Label>
-            <Textarea
-              value={(nodeConfig.enum || []).join("\n")}
-              onChange={(e) =>
-                handleConfigChange(
-                  "enum",
-                  e.target.value.split("\n").filter(Boolean)
-                )
-              }
-              className="min-h-[80px] text-sm"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Display Names (one per line)</Label>
-            <Textarea
-              value={(nodeConfig.enumNames || []).join("\n")}
-              onChange={(e) =>
-                handleConfigChange(
-                  "enumNames",
-                  e.target.value.split("\n").filter(Boolean)
-                )
-              }
-              className="min-h-[80px] text-sm"
-            />
-          </div>
-        </div>
-        <WidgetSelector
-          fieldType={nodeConfig.type}
-          value={nodeConfig.ui?.["ui:widget"]}
-          onValueChange={(value) => handleUiConfigChange("ui:widget", value)}
-          className="space-y-1.5"
-        />
-      </div>
-    );
-  };
+  const metadata = getFieldTypeMetadata(nodeConfig.type);
+  const categoryConfig = CATEGORY_CONFIG[getFieldTypeCategory(nodeConfig.type)];
+  const FieldIcon = metadata.icon;
 
   return (
-    <div className="relative p-2 space-y-3">
-      {/* Top Action Icons */}
-      <div className="absolute top-2 right-2 flex gap-1.5">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleCancel}
-          className="h-6 w-6 text-muted-foreground hover:text-foreground"
-        >
-          <X className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleSave}
-          className="h-6 w-6 text-muted-foreground hover:text-foreground"
-        >
-          <Check className="h-4 w-4" />
-        </Button>
-      </div>
+    <div className="h-full flex flex-col">
+      {/* Fixed Header Section - Sticky at top */}
+      <div className="flex-shrink-0 bg-background/95 backdrop-blur-sm border-b border-border/50 sticky top-0 z-20 shadow-sm">
+        <div className="p-4 space-y-3">
+          {/* Breadcrumb Navigation - Smart truncation for long paths */}
+          {breadcrumbPath.length > 1 && (
+            <div 
+              className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0 overflow-hidden"
+              title={getBreadcrumbDisplay.fullPath || breadcrumbPath.map(item => item.title).join(' > ')}
+            >
+              {getBreadcrumbDisplay.items.map((item, displayIndex) => {
+                const isLast = displayIndex === getBreadcrumbDisplay.items.length - 1;
+                
+                return (
+                  <div key={item.id} className="flex items-center gap-1.5 flex-shrink-0 min-w-0">
+                    {displayIndex > 0 && (
+                      <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground/60" />
+                    )}
+                    {/* Show ellipsis before last items if needed */}
+                    {getBreadcrumbDisplay.showEllipsis && displayIndex === 1 && (
+                      <>
+                        <span className="text-muted-foreground/60 px-1">...</span>
+                        <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground/60" />
+                      </>
+                    )}
+                    <span 
+                      className={cn(
+                        "truncate max-w-[140px] sm:max-w-[180px]",
+                        isLast && "font-medium text-foreground"
+                      )}
+                      title={item.title}
+                    >
+                      {item.title}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
-      {/* Basic Configuration */}
-      <div className="space-y-2 mt-6">
-        <div className="grid grid-cols-[1fr,1fr] gap-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Title</Label>
-            <Input
-              value={formData.title}
-              onChange={(e) => {
-                const newTitle = e.target.value;
-                setFormData((prev) => {
-                  // Auto-generate key from title if key hasn't been manually edited
-                  // or if current key matches the auto-generated key from initial title
-                  const shouldAutoGenerate = !keyWasManuallyEdited || 
-                    (initialNode && prev.key === titleToKey(initialNode.title));
-                  
-                  if (shouldAutoGenerate && nodeConfig) {
-                    // Get parent ID from graph
-                    const parentId = graph.parentIndex.get(nodeId!) || 'root';
-                    const newKey = generateUniqueKey(graph, newTitle, parentId, nodeId!);
-                    return { ...prev, title: newTitle, key: newKey };
-                  }
-                  
-                  return { ...prev, title: newTitle };
-                });
-              }}
-              placeholder="Field title"
-              className="h-7 text-sm"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Key</Label>
-            <Input
-              value={formData.key}
-              onChange={(e) => {
-                setKeyWasManuallyEdited(true);
-                setFormData((prev) => ({ ...prev, key: e.target.value }));
-              }}
-              placeholder="Field key"
-              className="h-7 text-sm"
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-[1fr,auto] gap-2 items-start">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Description</Label>
-            <Input
-              value={formData.description}
-              onChange={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  description: e.target.value,
-                }))
-              }
-              placeholder="Field description"
-              className="h-7 text-sm"
-            />
-          </div>
-          <div className="space-y-1.5 pt-5">
-            <div className="flex items-center gap-1.5">
-              <Switch
-                id="required"
-                checked={formData.required}
-                onCheckedChange={(checked) =>
-                  setFormData((prev) => ({ ...prev, required: checked }))
-                }
-                className="scale-75"
-              />
-              <Label htmlFor="required" className="text-xs">
-                Required
-              </Label>
+          {/* Enhanced Header with Icon, Badge, and Actions */}
+          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3 flex-1 min-w-0">
+            {/* Field Type Icon */}
+            <div className={cn(
+              "flex-shrink-0 p-2.5 rounded-lg transition-all duration-200",
+              metadata.bgColor,
+              "shadow-sm"
+            )}>
+              <FieldIcon className={cn("h-5 w-5", metadata.color)} />
+            </div>
+            
+            {/* Field Info */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                <span className={cn(
+                  "text-xs font-medium px-2 py-0.5 rounded-full transition-colors",
+                  categoryConfig.bgColor,
+                  categoryConfig.color
+                )}>
+                  {categoryConfig.label}
+                </span>
+                <span className="text-xs text-muted-foreground">•</span>
+                <span className="text-sm font-semibold text-foreground">
+                  {getFieldTypeLabel(nodeConfig.type)}
+                </span>
+                {hasUnsavedChanges && (
+                  <>
+                    <span className="text-xs text-muted-foreground">•</span>
+                    <div className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-500">
+                      <AlertCircle className="h-3 w-3" />
+                      <span>Unsaved</span>
+                    </div>
+                  </>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                {metadata.description}
+              </p>
             </div>
           </div>
-        </div>
-
-        {/* Default Value */}
-        <div className="space-y-1.5">
-          <Label className="text-xs">Default Value</Label>
-          {nodeConfig.type === 'boolean' ? (
-            <Select
-              value={formData.default === undefined ? '' : String(formData.default)}
-              onValueChange={(value) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  default: value === '' ? undefined : value === 'true',
-                }))
-              }
+          
+          {/* Action Buttons */}
+          <div className="flex gap-1.5 flex-shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleCancel}
+              className={cn(
+                "h-8 gap-1.5 text-xs transition-all duration-200",
+                hasUnsavedChanges 
+                  ? "text-muted-foreground hover:text-destructive hover:bg-destructive/10" 
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+              title={hasUnsavedChanges ? "Discard changes" : "Cancel"}
             >
-              <SelectTrigger className="h-7 text-sm">
-                <SelectValue placeholder="No default" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">No default</SelectItem>
-                <SelectItem value="true">True</SelectItem>
-                <SelectItem value="false">False</SelectItem>
-              </SelectContent>
-            </Select>
-          ) : nodeConfig.type === 'number' ? (
-            <Input
-              type="number"
-              value={formData.default === undefined ? '' : String(formData.default)}
-              onChange={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  default: e.target.value === '' ? undefined : e.target.value,
-                }))
-              }
-              placeholder="Enter default number"
-              className="h-7 text-sm"
-            />
-          ) : (
-            <Input
-              value={formData.default === undefined ? '' : String(formData.default)}
-              onChange={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  default: e.target.value === '' ? undefined : e.target.value,
-                }))
-              }
-              placeholder="Enter default value"
-              className="h-7 text-sm"
-            />
-          )}
-          <p className="text-xs text-muted-foreground">
-            This value will be pre-filled in the form
-          </p>
+              <X className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Cancel</span>
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleSave}
+              disabled={!hasUnsavedChanges}
+              className={cn(
+                "h-8 gap-1.5 text-xs transition-all duration-200",
+                hasUnsavedChanges 
+                  ? "bg-primary hover:bg-primary/90 shadow-sm" 
+                  : "opacity-50 cursor-not-allowed"
+              )}
+              title={hasUnsavedChanges ? "Save changes" : "No changes to save"}
+            >
+              <Check className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Save</span>
+            </Button>
+          </div>
+        </div>
         </div>
       </div>
 
-      {/* Type-specific Configuration */}
-      <div className="space-y-2">
-        <Label className="text-xs font-medium">
-          Type-specific Configuration
-        </Label>
-        {renderTypeSpecificConfig()}
+      {/* Scrollable Content Section */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-4 space-y-5">
+        {/* Basic Properties - Always shown */}
+        <div className="animate-in fade-in-0 slide-in-from-bottom-2 duration-200 delay-75">
+          <BasicPropertiesSection
+          fieldType={nodeConfig.type}
+          title={formData.title}
+          description={formData.description}
+          fieldKey={formData.key}
+          onTitleChange={(value) => {
+            setFormData((prev) => {
+              // Auto-generate key from title if key hasn't been manually edited
+              const shouldAutoGenerate = !keyWasManuallyEdited || 
+                (initialNode && prev.key === titleToKey(initialNode.title));
+              
+              if (shouldAutoGenerate && nodeConfig) {
+                const parentId = graph.parentIndex.get(nodeId!) || 'root';
+                const newKey = generateUniqueKey(graph, value, parentId, nodeId!);
+                return { ...prev, title: value, key: newKey };
+              }
+              
+              return { ...prev, title: value };
+            });
+          }}
+          onDescriptionChange={(value) => 
+            setFormData((prev) => ({ ...prev, description: value }))
+          }
+          onKeyChange={(value) => 
+            setFormData((prev) => ({ ...prev, key: value }))
+          }
+          keyWasManuallyEdited={keyWasManuallyEdited}
+          setKeyWasManuallyEdited={setKeyWasManuallyEdited}
+          />
+        </div>
+
+        {/* Data Properties - Only for data fields */}
+        {isDataField(nodeConfig.type) && (
+          <div className="animate-in fade-in-0 slide-in-from-bottom-2 duration-200 delay-100">
+            <div className="border-t border-border/50 mb-5" />
+            <DataPropertiesSection
+              fieldType={nodeConfig.type}
+              required={formData.required}
+              defaultValue={formData.default}
+              onRequiredChange={(value) => 
+                setFormData((prev) => ({ ...prev, required: value }))
+              }
+              onDefaultChange={(value) => 
+                setFormData((prev) => ({ ...prev, default: value }))
+              }
+            />
+          </div>
+        )}
+
+        {/* Validation Section - Type-specific validation rules */}
+        {(shouldShowProperty(nodeConfig.type, 'minLength') || 
+          shouldShowProperty(nodeConfig.type, 'minimum') ||
+          shouldShowProperty(nodeConfig.type, 'minItems') ||
+          shouldShowProperty(nodeConfig.type, 'minProperties') ||
+          shouldShowProperty(nodeConfig.type, 'enum')) && (
+          <div className="animate-in fade-in-0 slide-in-from-bottom-2 duration-200 delay-150">
+            <div className="border-t border-border/50 mb-5" />
+            <ValidationSection
+              fieldType={nodeConfig.type}
+              config={nodeConfig as unknown as Record<string, unknown>}
+              onChange={handleConfigChange}
+              onUiChange={handleUiConfigChange}
+            />
+          </div>
+        )}
+
+        {/* UI Customization - Widget selection */}
+        {shouldShowProperty(nodeConfig.type, 'widget') && (
+          <div className="animate-in fade-in-0 slide-in-from-bottom-2 duration-200 delay-200">
+            <div className="border-t border-border/50 mb-5" />
+            <UICustomizationSection
+            fieldType={nodeConfig.type}
+            widget={nodeConfig.ui?.['ui:widget']}
+            onWidgetChange={(value) => handleUiConfigChange('ui:widget', value)}
+          />
+          </div>
+        )}
+        </div>
       </div>
     </div>
   );

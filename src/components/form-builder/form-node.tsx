@@ -10,7 +10,6 @@ import {
   GripVertical,
   X,
   GitBranch,
-  Settings2,
   ArrowRight,
   ChevronDown,
   ChevronRight,
@@ -19,7 +18,7 @@ import {
   AlertCircle,
   Info,
 } from "lucide-react";
-import { useState, useEffect, useMemo, memo } from "react";
+import { useState, useEffect, useMemo, memo, useRef } from "react";
 import {
   useSchemaGraphStore,
 } from "@/lib/store/schema-graph";
@@ -30,7 +29,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { SortableContext } from "@dnd-kit/sortable";
 import { verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { FieldConfigPanel } from "./field-config-panel";
+// FieldConfigPanel moved to RightPanel - no longer used inline
 import { Button } from "@/components/ui/button";
 import { SaveAsComponentDialog } from "./save-as-component-dialog";
 import type { FormNodeProps } from "./types";
@@ -100,7 +99,22 @@ const FormNodeComponent = function FormNode({
   const { expandTrigger, collapseTrigger } = useExpandContext();
   const [isEditing, setIsEditing] = useState(false);
   const [nestingDepth, setNestingDepth] = useState(0);
-  const [isOpen, setIsOpen] = useState(true);
+  
+  // Track last trigger values to handle recursive expand/collapse
+  const lastExpandTriggerRef = useRef(expandTrigger);
+  const lastCollapseTriggerRef = useRef(collapseTrigger);
+  
+  // Initialize isOpen based on current trigger state (for newly rendered children)
+  // If collapseTrigger is more recent, start closed; otherwise start open
+  const [isOpen, setIsOpen] = useState(() => {
+    // If collapse was triggered more recently than expand, start closed
+    if (collapseTrigger > expandTrigger) {
+      return false;
+    }
+    // Otherwise start open (default)
+    return true;
+  });
+  
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   
   // Sync isEditing with selectedNodeId - when this node is selected, enter edit mode
@@ -108,16 +122,20 @@ const FormNodeComponent = function FormNode({
     setIsEditing(selectedNodeId === nodeId);
   }, [selectedNodeId, nodeId]);
 
-  // Listen to expand/collapse triggers and update local state
+  // Listen to expand/collapse triggers and update local state recursively
   useEffect(() => {
-    if (expandTrigger > 0) {
+    if (expandTrigger > lastExpandTriggerRef.current) {
       setIsOpen(true);
+      lastExpandTriggerRef.current = expandTrigger;
+      // Note: Children will also receive this trigger via context and expand themselves
     }
   }, [expandTrigger]);
 
   useEffect(() => {
-    if (collapseTrigger > 0) {
+    if (collapseTrigger > lastCollapseTriggerRef.current) {
       setIsOpen(false);
+      lastCollapseTriggerRef.current = collapseTrigger;
+      // Note: Children will also receive this trigger via context and collapse themselves
     }
   }, [collapseTrigger]);
   
@@ -172,6 +190,7 @@ const FormNodeComponent = function FormNode({
   }, [graph, nodeId, node]);
 
   // Sortable hook - must be called before early return
+  // Disable dragging for definitions (they should only be dragged from palette to create references)
   const {
     setNodeRef,
     attributes,
@@ -181,6 +200,7 @@ const FormNodeComponent = function FormNode({
     isDragging,
   } = useSortable({
     id: nodeId,
+    disabled: node?.isDefinition === true, // Disable dragging for definitions
     data: {
       type: "node",
       nodeId,
@@ -399,9 +419,24 @@ const FormNodeComponent = function FormNode({
     }
   };
 
-  const handleEdit = (e: React.MouseEvent) => {
+  // Handle clicking on the field to open config panel
+  const handleFieldClick = (e: React.MouseEvent) => {
+    // Don't trigger if clicking on interactive elements (buttons, drag handle, etc.)
+    const target = e.target as HTMLElement;
+    if (
+      target.closest('button') ||
+      target.closest('[role="button"]') ||
+      target.closest('[data-drag-handle]')
+    ) {
+      return;
+    }
+    
+    // Don't trigger during drag operations
+    if (isDragging || globalIsDragging) {
+      return;
+    }
+    
     e.stopPropagation();
-    setIsEditing(true);
     onSelect(nodeId);
   };
 
@@ -445,14 +480,20 @@ const FormNodeComponent = function FormNode({
           {renderDepthIndicators()}
           <Collapsible open={isOpen} onOpenChange={setIsOpen} className="w-full">
             <div className="flex items-center gap-2 p-3 min-w-0">
-              <button
-                {...attributes}
-                {...listeners}
-                className="touch-none flex-shrink-0 hover:bg-muted/50 rounded p-1 transition-colors"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab active:cursor-grabbing" />
-              </button>
+              {!node?.isDefinition && (
+                <button
+                  {...attributes}
+                  {...listeners}
+                  data-drag-handle
+                  className="touch-none flex-shrink-0 hover:bg-muted/50 rounded p-1 transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab active:cursor-grabbing" />
+                </button>
+              )}
+              {node?.isDefinition && (
+                <div className="flex-shrink-0 w-6" /> // Spacer for definitions (no drag handle)
+              )}
               <CollapsibleTrigger asChild>
                 <Button
                   variant="ghost"
@@ -468,27 +509,31 @@ const FormNodeComponent = function FormNode({
                 </Button>
               </CollapsibleTrigger>
               <div className="flex flex-1 items-center gap-2 min-w-0">
-                {Icon && (
-                  <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                )}
-                <div className="flex flex-1 items-center gap-2 min-w-0">
-                  <div className="flex-1 truncate">
-                    <span className="text-sm font-medium">{node.title}</span>
-                    {node.key && (
-                      <span className="ml-1 text-xs text-muted-foreground">
-                        ({node.key})
-                      </span>
-                    )}
-                  </div>
-                  {node.type === 'ref' && node.refTarget && (
-                    <div 
-                      className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-primary/10 border border-primary/30 text-xs text-primary flex-shrink-0 hover:bg-primary/15 transition-colors cursor-help"
-                      title={`References definition: ${node.refTarget}`}
-                    >
-                      <Bookmark className="h-3 w-3 fill-primary/20" />
-                      <span className="font-medium">{node.refTarget}</span>
-                    </div>
+              {Icon && (
+                <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              )}
+              <div 
+                onClick={handleFieldClick}
+                className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer hover:bg-muted/30 rounded px-2 py-1 -mx-2 transition-colors group/field"
+              >
+                <div className="flex-1 truncate">
+                  <span className="text-sm font-medium group-hover/field:text-primary transition-colors">{node.title}</span>
+                  {node.key && (
+                    <span className="ml-1 text-xs text-muted-foreground">
+                      ({node.key})
+                    </span>
                   )}
+                </div>
+                {node.type === 'ref' && node.refTarget && (
+                  <div 
+                    className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-primary/10 border border-primary/30 text-xs text-primary flex-shrink-0 hover:bg-primary/15 transition-colors cursor-help"
+                    title={`References definition: ${node.refTarget}`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Bookmark className="h-3 w-3 fill-primary/20" />
+                    <span className="font-medium">{node.refTarget}</span>
+                  </div>
+                )}
                   {node.isDefinition && (
                     <div 
                       className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-600 dark:text-emerald-400 flex-shrink-0 hover:bg-emerald-500/15 transition-colors"
@@ -534,17 +579,7 @@ const FormNodeComponent = function FormNode({
                       <div className="w-px h-4 bg-border mx-0.5" />
                     </>
                   )}
-                  {/* Edit, Save as Component, and Delete buttons */}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 hover:bg-muted"
-                    onClick={handleEdit}
-                    title="Edit"
-                  >
-                    <Settings2 className="h-3.5 w-3.5" />
-                    <span className="sr-only">Edit</span>
-                  </Button>
+                  {/* Save as Component and Delete buttons - Edit removed, field is now clickable */}
                   {canSaveAsComponent && (
                     <Button
                       variant="ghost"
@@ -574,35 +609,17 @@ const FormNodeComponent = function FormNode({
               </div>
             </div>
             
-            {!isEditing && (
-              <CollapsibleContent>
-                <div className="px-3 pb-3">
-                  <IfBlock
-                    nodeId={nodeId}
-                    isDragging={globalIsDragging}
-                    draggedItem={draggedItem || undefined}
-                    activeDropZone={activeDropZone}
-                    dropPreview={dropPreview}
-                  />
-                </div>
-              </CollapsibleContent>
-            )}
-            
-            {isEditing && (
+            <CollapsibleContent>
               <div className="px-3 pb-3">
-                <FieldConfigPanel
+                <IfBlock
                   nodeId={nodeId}
-                  onSave={() => {
-                    setIsEditing(false);
-                    onSelect(null);
-                  }}
-                  onCancel={() => {
-                    setIsEditing(false);
-                    onSelect(null);
-                  }}
+                  isDragging={globalIsDragging}
+                  draggedItem={draggedItem || undefined}
+                  activeDropZone={activeDropZone}
+                  dropPreview={dropPreview}
                 />
               </div>
-            )}
+            </CollapsibleContent>
           </Collapsible>
         </div>
         {/* Insertion indicator line below - shown when reordering */}
@@ -627,41 +644,25 @@ const FormNodeComponent = function FormNode({
       )}
       <div ref={setRefs} style={style} className={baseClasses}>
         {renderDepthIndicators()}
-      {isEditing ? (
-        <div className="flex items-center gap-2 p-3 min-w-0">
-          <button
-            {...attributes}
-            {...listeners}
-            className="touch-none flex-shrink-0 hover:bg-muted/50 rounded p-1 transition-colors"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab active:cursor-grabbing" />
-          </button>
-          <div className="flex-1">
-            <FieldConfigPanel
-              nodeId={nodeId}
-              onSave={() => {
-                setIsEditing(false);
-                onSelect(null);
-              }}
-              onCancel={() => {
-                setIsEditing(false);
-                onSelect(null);
-              }}
-            />
-          </div>
-        </div>
-      ) : (
+      {/* Config panel moved to RightPanel - no more inline editing */}
+      {/* Field now just shows normally, config panel is in the right sidebar */}
+      {(
         <Collapsible open={isOpen} onOpenChange={setIsOpen} className="w-full">
           <div className="flex items-center gap-2 p-3 min-w-0">
-            <button
-              {...attributes}
-              {...listeners}
-              className="touch-none flex-shrink-0 hover:bg-muted/50 rounded p-1 transition-colors"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab active:cursor-grabbing" />
-            </button>
+            {!node?.isDefinition && (
+              <button
+                {...attributes}
+                {...listeners}
+                data-drag-handle
+                className="touch-none flex-shrink-0 hover:bg-muted/50 rounded p-1 transition-colors"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab active:cursor-grabbing" />
+              </button>
+            )}
+            {node?.isDefinition && (
+              <div className="flex-shrink-0 w-6" aria-label="Definition (not draggable)" />
+            )}
             <div className="flex flex-1 items-center gap-2 min-w-0">
               {/* Optimized: Use nodeType instead of node.type */}
               {(nodeType === "object" || nodeType === "array") && (
@@ -683,9 +684,12 @@ const FormNodeComponent = function FormNode({
               {Icon && (
                 <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
               )}
-              <div className="flex flex-1 items-center gap-2 min-w-0">
+              <div 
+                onClick={handleFieldClick}
+                className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer hover:bg-muted/30 rounded px-2 py-1 -mx-2 transition-colors group/field"
+              >
                 <div className="flex-1 truncate">
-                  <span className="text-sm font-medium">{node.title}</span>
+                  <span className="text-sm font-medium group-hover/field:text-primary transition-colors">{node.title}</span>
                   {node.key && (
                     <span className="ml-1 text-xs text-muted-foreground">
                       ({node.key})
@@ -696,6 +700,7 @@ const FormNodeComponent = function FormNode({
                   <div 
                     className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-primary/10 border border-primary/30 text-xs text-primary flex-shrink-0 hover:bg-primary/15 transition-colors cursor-help"
                     title={`References component: ${node.refTarget}`}
+                    onClick={(e) => e.stopPropagation()}
                   >
                     <Bookmark className="h-3 w-3 fill-primary/20" />
                     <span className="font-medium">{node.refTarget}</span>
@@ -705,6 +710,7 @@ const FormNodeComponent = function FormNode({
                   <div 
                     className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-600 dark:text-emerald-400 flex-shrink-0 hover:bg-emerald-500/15 transition-colors"
                     title={`Reusable component: ${node.definitionName}`}
+                    onClick={(e) => e.stopPropagation()}
                   >
                     <Bookmark className="h-3 w-3 fill-emerald-500/20" />
                     <span className="font-medium">Component</span>
@@ -753,17 +759,7 @@ const FormNodeComponent = function FormNode({
                     <div className="w-px h-4 bg-border mx-0.5" />
                   </>
                 )}
-                {/* Edit, Save as Component, and Delete buttons */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 hover:bg-muted"
-                  onClick={handleEdit}
-                  title="Edit"
-                >
-                  <Settings2 className="h-3.5 w-3.5" />
-                  <span className="sr-only">Edit</span>
-                </Button>
+                {/* Save as Component and Delete buttons - Edit removed, field is now clickable */}
                 {canSaveAsComponent && (
                   <Button
                     variant="ghost"
